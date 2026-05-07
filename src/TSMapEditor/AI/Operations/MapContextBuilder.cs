@@ -1,0 +1,57 @@
+using System.Collections.Generic;
+using System.Text;
+using TSMapEditor.Models;
+using TSMapEditor.Rendering;
+
+namespace TSMapEditor.AI.Operations
+{
+    /// <summary>
+    /// Builds context information about the current map state for the AI's system prompt.
+    /// This helps the AI understand the map dimensions, available tilesets, and current state.
+    /// </summary>
+    public static class MapContextBuilder
+    {
+        /// <summary>
+        /// Builds a context string describing the current map for the AI.
+        /// </summary>
+        public static string BuildContext(Map map, TheaterGraphics theaterGraphics)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine("=== 当前地图信息 ===");
+            sb.AppendLine($"地图尺寸: {map.Size.X} x {map.Size.Y} (宽 x 高，单位: 格子)");
+            sb.AppendLine($"有效坐标范围: X = 0 到 {map.Size.X - 1}, Y = 0 到 {map.Size.Y - 1}");
+            sb.AppendLine();
+
+            // List available tilesets
+            sb.AppendLine("=== 可用的地形类型 (TileSet) ===");
+            var tileSets = theaterGraphics.Theater.TileSets;
+            var usableTileSets = new List<string>();
+
+            for (int i = 0; i < tileSets.Count; i++)
+            {
+                var tileSet = tileSets[i];
+                if (tileSet.TilesInSet > 0 && !string.IsNullOrWhiteSpace(tileSet.SetName))
+                {
+                    // Only list 1x1 tilesets (suitable for area fill)
+                    if (tileSet.Only1x1 || tileSet.SetName.Contains("LAT") ||
+                        tileSet.SetName.Contains("Clear") || tileSet.SetName.Contains("Water") ||
+                        tileSet.SetName.Contains("Sand") || tileSet.SetName.Contains("Rough") ||
+                        tileSet.SetName.Contains("Green") || tileSet.SetName.Contains("Pave") ||
+                        tileSet.SetName.Contains("Dirt"))
+                    {
+                        usableTileSets.Add($"  - \"{tileSet.SetName}\" (ID={i}, 包含 {tileSet.TilesInSet} 个瓦片)");
+                    }
+                }
+            }
+
+            foreach (string ts in usableTileSets)
+                sb.AppendLine(ts);
+
+            sb.AppendLine();
+            sb.AppendLine("注意: TileSetName 必须完全匹配上面列出的名称（区分大小写）。");
+
+            return sb.ToString();
+        }
+    }
+}

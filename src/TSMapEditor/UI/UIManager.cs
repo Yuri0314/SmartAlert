@@ -1,9 +1,11 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
 using System.Linq;
+using TSMapEditor.AI;
 using TSMapEditor.Misc;
 using TSMapEditor.Models;
 using TSMapEditor.Mutations;
@@ -88,6 +90,12 @@ namespace TSMapEditor.UI
 
         private AutosaveTimer autosaveTimer;
         private MapFileWatcher mapFileWatcher;
+
+        // SmartAlert AI integration
+        private AIChatService aiChatService;
+        private AIChatPanel aiChatPanel;
+        private AISettingsWindow aiSettingsWindow;
+        private bool isAIChatPanelVisible = false;
 
         public void SetAutoUpdateChildOrder(bool value) => AutoUpdateChildOrder = value;
 
@@ -202,7 +210,67 @@ namespace TSMapEditor.UI
             WindowManager.GameClosing += WindowManager_GameClosing;
             KeyboardCommands.Instance.ToggleFullscreen.Triggered += ToggleFullscreen_Triggered;
 
+            // Initialize SmartAlert AI chat panel
+            InitAIChatPanel();
+
             SetInitialDisplayMode();
+        }
+
+        private void InitAIChatPanel()
+        {
+            aiChatService = new AIChatService();
+            aiChatService.SetMapContext(map, theaterGraphics, mutationManager, mapUI);
+
+            aiChatPanel = new AIChatPanel(WindowManager, aiChatService);
+            aiChatPanel.Name = nameof(aiChatPanel);
+            aiChatPanel.Width = 350;
+            aiChatPanel.Height = WindowManager.RenderResolutionY - Constants.UITopBarMenuHeight;
+            aiChatPanel.X = WindowManager.RenderResolutionX - aiChatPanel.Width;
+            aiChatPanel.Y = Constants.UITopBarMenuHeight;
+            aiChatPanel.DrawOrder = 1000;
+            aiChatPanel.UpdateOrder = 1000;
+            aiChatPanel.SettingsRequested += (s, e) => ShowAISettings();
+            AddChild(aiChatPanel);
+            aiChatPanel.Disable(); // Start hidden
+
+            aiSettingsWindow = new AISettingsWindow(WindowManager, aiChatService);
+            aiSettingsWindow.DrawOrder = 2000;
+            aiSettingsWindow.UpdateOrder = 2000;
+            AddChild(aiSettingsWindow);
+            aiSettingsWindow.Disable();
+
+            Keyboard.OnKeyPressed += AIChatKeyHandler;
+        }
+
+        private void AIChatKeyHandler(object sender, Rampastring.XNAUI.Input.KeyPressEventArgs e)
+        {
+            // Ctrl+Shift+A toggles AI chat panel
+            if (e.PressedKey == Keys.A && Keyboard.IsCtrlHeldDown() && Keyboard.IsShiftHeldDown())
+            {
+                ToggleAIChatPanel();
+                e.Handled = true;
+            }
+        }
+
+        private void ToggleAIChatPanel()
+        {
+            isAIChatPanelVisible = !isAIChatPanelVisible;
+
+            if (isAIChatPanelVisible)
+            {
+                aiChatPanel.Enable();
+                aiChatPanel.RefreshLayout();
+            }
+            else
+            {
+                aiChatPanel.Disable();
+            }
+        }
+
+        private void ShowAISettings()
+        {
+            aiSettingsWindow.Enable();
+            aiSettingsWindow.CenterOnParent();
         }
 
         private void SetInitialDisplayMode()
@@ -526,6 +594,14 @@ namespace TSMapEditor.UI
             WindowManager.WindowSizeChangedByUser -= WindowManager_WindowSizeChangedByUser;
             WindowManager.RenderResolutionChanged -= WindowManager_RenderResolutionChanged;
             KeyboardCommands.Instance.ToggleFullscreen.Triggered -= ToggleFullscreen_Triggered;
+
+            // Clean up AI chat
+            Keyboard.OnKeyPressed -= AIChatKeyHandler;
+            aiChatPanel?.Kill();
+            aiChatPanel = null;
+            aiSettingsWindow?.Kill();
+            aiSettingsWindow = null;
+            aiChatService = null;
 
             Disable();
 

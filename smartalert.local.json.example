@@ -1,0 +1,5 @@
+{
+  "apiEndpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "apiKey": "sk-your-api-key-here",
+  "modelName": "qwen-plus"
+}
