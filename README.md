@@ -1,88 +1,67 @@
-<p align="center">
-  <img alt="World-Altering Editor Logo" src="https://raw.githubusercontent.com/CnCNet/WorldAlteringEditor/refs/heads/master/docs/images/waelogotype.png" width=600 />
-</p>
-<p align="center">
-  <a href="https://ko-fi.com/rampastring"><img alt="Donate on Ko-Fi" src="https://img.shields.io/badge/Donate-KoFi-green.svg"></a>
-  <a href="https://www.patreon.com/rampastring"><img alt="Donate on Patreon" src="https://img.shields.io/badge/Donate-Patreon-red.svg"></a>
-  <a href="https://github.com/CnCNet/WorldAlteringEditor/releases"><img alt="Total Downloads" src="https://img.shields.io/github/downloads/CnCNet/WorldAlteringEditor/total.svg"></a>
-</p>
+# SmartAlert
 
-<p align="center">
-  Modern open-source map and scenario editor for Command & Conquer: Red Alert 2, Command & Conquer: Tiberian Sun and the <a href="https://www.moddb.com/mods/the-dawn-of-the-tiberium-age">Dawn of the Tiberium Age</a> mod.
-</p>
+一个 AI 驱动的红色警戒系列地图编辑器，基于 [WorldAlteringEditor](https://github.com/CnCNet/WorldAlteringEditor) fork 开发。
 
-## About
+## 🎯 核心特性
 
-The World-Altering Editor is a new map editor for the second-generation classic Command & Conquer games,
-designed to replace the old FinalSun/FinalAlert2 (FS/FA2) map editor developed in the TS/RA2 modding community in the early 2000s.
+- **AI 自然语言编辑** — 用中文/英文描述地图需求，AI 理解并修改地图
+- **人机混合模式** — 传统手工编辑 + AI 辅助，任何节点可互相干预
+- **双模 AI 交互** — 聊天面板（全局操作）+ 选区指令（局部精修）
+- **多游戏支持** — RA2 / YR / TS 及各种 Mod（心灵终结等）
 
-To make it familiar for existing mappers, the editor is designed to follow the FS/FA2 UI design,
-but with modernizations and changes to make the editor smoother and more efficient to use.
+## 🏗️ 技术栈
 
-Check out the [user manual](docs/Manual.md) for advanced tips and tricks for mapping with WAE.
+| 项目 | 选择 |
+|------|------|
+| 基座 | WorldAlteringEditor (WAE) fork, yr 分支 |
+| 语言 | C# / .NET 8 |
+| 渲染 | MonoGame / DirectX11 |
+| 平台 | Windows 桌面应用 |
+| AI | Anthropic Claude / OpenAI GPT / 自定义 API |
+| 许可证 | GPL v3 |
 
-## State of the project
+## 📋 开发阶段
 
-The editor includes practically all tools present in FS/FA2 and a significant number of
-new ones. Many familiar tools have been improved with significant quality-of-life improvements.
-These improvements make it much more efficient to create maps with WAE than the old FS/FA2 map editors.
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| P0 | Fork WAE，跑通编译，能打开 MO 地图 | ✅ 完成 |
+| P1 | AI 聊天面板 + 基础地形生成/修改 | 未开始 |
+| P2 | 选区指令模式 + 单位/建筑/资源放置 | 未开始 |
+| P3 | 触发器生成、平衡性分析、模板系统 | 未开始 |
 
-New functionality and helpful features are being constantly added to make the mapping experience smoother and more efficient.
-Some examples include a zoom function, lighting preview, a much improved trigger editor interface, and a terrain generator for rapid detailing of large areas.
+## 🚀 快速开始
 
-## System requirements
+### 前置要求
 
-WAE is graphically more demanding than FS/FA2, but can also utilize modern hardware
-much more efficiently, meaning that if you have a decently modern computer, WAE achieves smoother
-performance with better graphical quality.
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- DirectX11 兼容 GPU（建议 2GB+ VRAM）
+- 红色警戒2 / 心灵终结游戏安装
 
-To run WAE, you need the following
+### 首次设置
 
-- .NET 8 Desktop Runtime
-- DirectX11 compatible GPU\*. At least 2 GB of VRAM is recommended, although WAE can run on less.
-- 64-bit system. If you absolutely need a 32-bit build, you can modify the source to produce one.
+```bash
+# 1. 安装 MonoGame Content Builder 工具
+dotnet tool install --global dotnet-mgcb --version 3.8.3
+```
 
-\* Some Intel GPUs, such as HD Graphics 4000, are known to have driver issues that prevent them from running WAE. It is recommended to have an AMD or Nvidia GPU for WAE, but newer Intel GPUs can also work.
+### 编译和运行
 
-## Downloads
+```bash
+# 编译核心编辑器
+dotnet build src/TSMapEditor/TSMapEditor.csproj --configuration Release
 
-For most end-users, it is recommended that you download our latest official release: https://github.com/CnCNet/WorldAlteringEditor/releases
+# 运行编辑器
+dotnet run --project src/TSMapEditor/TSMapEditor.csproj --configuration Release
+```
 
-Development builds are available through our automated build workflow which is run whenever new commits are pushed. You can download the editor from the build artifacts:
-https://github.com/CnCNet/WorldAlteringEditor/actions
+启动后在界面中设置游戏目录路径（如 `D:\Game\MentalOmega\`），然后即可打开地图文件进行编辑。
 
-If you are mapping for Dawn of the Tiberium Age, the editor is bundled with the mod.
+## 📝 文档
 
-## Contributing
+- [设计文档](docs/superpowers/specs/2026-04-21-smartalert-design.md)
+- [WAE 用户手册](docs/Manual.md)
+- [WAE 贡献指南](docs/Contributing.md)
 
-We gladly accept contributions as long as they are well made and we deem them as beneficial for a significant part of the editor's userbase.
+## 📄 许可证
 
-Follow the [contribution guidelines](docs/Contributing.md) when creating pull requests.
-
-## License
-
-The editor is licensed under the GNU General Public License, version 3.
-If you create and publish a derivate, you need to also release your source code for the fork.
-Please see LICENSE.txt for more details.
-
-EA has not endorsed and does not support the World-Altering Editor.
-
-## Screenshot
-
-![Screenshot of the editor](docs/images/mapeditor.jpg "Map Editor Screenshot")
-
-## Introduction video
-
-[![Dawn of the Tiberium Age Scenario Editor Introduction](docs/images/videopreview.jpg)](https://www.youtube.com/watch?v=jIcr3nCqx7M "Dawn of the Tiberium Age Scenario Editor Introduction")
-
-The World-Altering Editor was originally developed by the Dawn of the Tiberium Age staff for their mod. TS and YR support were added later to offer a boost in mapping efficiency to the rest of the second-generation C&C community.
-
-[![Dawn of the Tiberium Age Homepage](docs/images/dtalogo.png)](https://www.moddb.com/mods/the-dawn-of-the-tiberium-age "Dawn of the Tiberium Age Homepage")
-
-## Sponsored by
-
-The World-Altering Editor is a CnCNet project. CnCNet is sponsored by DigitalOcean.
-
-<a href="https://www.digitalocean.com/?refcode=337544e2ec7b&utm_campaign=Referral_Invite&utm_medium=opensource&utm_source=CnCNet" title="Powered by Digital Ocean" target="_blank">
-    <img src="https://opensource.nyc3.cdn.digitaloceanspaces.com/attribution/assets/PoweredByDO/DO_Powered_by_Badge_blue.svg" width="201px" alt="Powered By Digital Ocean" />
-</a>
+GPL v3（继承自 WAE）。所有衍生代码必须开源。
