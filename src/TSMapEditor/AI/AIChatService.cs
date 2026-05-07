@@ -14,6 +14,11 @@ namespace TSMapEditor.AI
     /// <summary>
     /// The main AI chat service that coordinates the provider, parser, and map operator.
     /// Handles the full flow: user message → AI API → parse response → execute operations.
+    /// 
+    /// Important threading model:
+    /// - HTTP calls to AI run on a background thread (Task.Run)
+    /// - Map mutations MUST run on the main thread (MonoGame game loop)
+    /// - Pending operations are queued and executed via Update() on the main thread
     /// </summary>
     public class AIChatService
     {
@@ -26,6 +31,10 @@ namespace TSMapEditor.AI
         private TheaterGraphics theaterGraphics;
         private MutationManager mutationManager;
         private IMutationTarget mutationTarget;
+
+        // Thread-safe pending operations queue
+        private readonly object pendingLock = new object();
+        private PendingAIResult pendingResult;
 
         /// <summary>
         /// Event raised when the AI sends a response (message text).
@@ -109,8 +118,57 @@ namespace TSMapEditor.AI
         }
 
         /// <summary>
+        /// Must be called from the main game thread (e.g., in Update()).
+        /// Executes any pending map operations that were parsed from AI responses.
+        /// </summary>
+        public void ProcessPendingOperations()
+        {
+            PendingAIResult result = null;
+
+            lock (pendingLock)
+            {
+                if (pendingResult != null)
+                {
+                    result = pendingResult;
+                    pendingResult = null;
+                }
+            }
+
+            if (result == null)
+                return;
+
+            // Execute operations on the main thread
+            string operationResult = string.Empty;
+            if (result.Operations.Count > 0 && mapOperator != null)
+            {
+                try
+                {
+                    operationResult = mapOperator.ExecuteOperations(result.Operations);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"AIChatService: Failed to execute operations: {ex}");
+                    operationResult = $"操作执行失败: {ex.Message}";
+                }
+            }
+
+            // Combine message with operation results
+            string fullMessage = result.Message;
+            if (!string.IsNullOrEmpty(operationResult))
+                fullMessage += "\n\n" + operationResult;
+
+            // Add assistant message to history
+            chatHistory.Add(ChatMessage.Assistant(fullMessage));
+
+            MessageReceived?.Invoke(this, fullMessage);
+
+            IsBusy = false;
+            BusyStateChanged?.Invoke(this, false);
+        }
+
+        /// <summary>
         /// Sends a user message to the AI and processes the response.
-        /// This runs asynchronously; results are delivered via events.
+        /// HTTP call runs async; map operations are deferred to main thread via ProcessPendingOperations().
         /// </summary>
         public void SendMessage(string userMessage)
         {
@@ -146,45 +204,46 @@ namespace TSMapEditor.AI
 
                     string systemPrompt = IntentParser.BuildSystemPrompt(mapContext);
 
-                    // Call AI
+                    // Call AI (this is the only part that needs to be async)
                     string aiResponse = await provider.ChatAsync(systemPrompt, chatHistory, cts.Token);
 
-                    // Parse response
+                    // Parse response (safe to do on background thread)
                     var (message, operations) = IntentParser.Parse(aiResponse);
 
-                    // Execute operations on the map
-                    string operationResult = string.Empty;
-                    if (operations.Count > 0 && mapOperator != null)
+                    // Queue the result for main thread execution
+                    lock (pendingLock)
                     {
-                        operationResult = mapOperator.ExecuteOperations(operations);
+                        pendingResult = new PendingAIResult
+                        {
+                            Message = message,
+                            Operations = operations
+                        };
                     }
-
-                    // Combine message with operation results
-                    string fullMessage = message;
-                    if (!string.IsNullOrEmpty(operationResult))
-                        fullMessage += "\n\n" + operationResult;
-
-                    // Add assistant message to history
-                    chatHistory.Add(ChatMessage.Assistant(fullMessage));
-
-                    MessageReceived?.Invoke(this, fullMessage);
                 }
                 catch (OperationCanceledException)
                 {
                     ErrorOccurred?.Invoke(this, "AI 请求超时（120秒）。请检查网络连接。");
+                    IsBusy = false;
+                    BusyStateChanged?.Invoke(this, false);
                 }
                 catch (Exception ex)
                 {
                     Logger.Log($"AIChatService error: {ex}");
                     ErrorOccurred?.Invoke(this, $"AI 错误: {ex.Message}");
+                    IsBusy = false;
+                    BusyStateChanged?.Invoke(this, false);
                 }
                 finally
                 {
-                    IsBusy = false;
-                    BusyStateChanged?.Invoke(this, false);
                     cts.Dispose();
                 }
             });
+        }
+
+        private class PendingAIResult
+        {
+            public string Message { get; set; }
+            public List<MapOperation> Operations { get; set; }
         }
     }
 }

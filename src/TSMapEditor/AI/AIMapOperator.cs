@@ -92,10 +92,14 @@ namespace TSMapEditor.AI
             if (tileIndex < 0)
                 return $"找不到地形类型: \"{op.TileSetName}\"";
 
+            // Determine if we should flatten height (water needs to be at level 0)
+            bool isWater = op.TileSetName.IndexOf("Water", StringComparison.OrdinalIgnoreCase) >= 0;
+
             // Create and execute the mutation
             var mutation = new AITerrainMutation(mutationTarget, startX, startY,
                 actualWidth, actualHeight, tileIndex,
-                op.Description ?? $"填充 {op.TileSetName} 在 ({startX},{startY}) {actualWidth}x{actualHeight}");
+                op.Description ?? $"填充 {op.TileSetName} 在 ({startX},{startY}) {actualWidth}x{actualHeight}",
+                flattenHeight: isWater, targetHeight: 0);
 
             mutationManager.PerformMutation(mutation);
 

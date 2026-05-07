@@ -8,18 +8,18 @@ using TSMapEditor.UI.Controls;
 namespace TSMapEditor.UI
 {
     /// <summary>
-    /// The AI chat panel displayed on the right side of the editor.
+    /// The AI chat panel displayed as a floating, draggable window.
     /// Provides a chat interface for natural language map editing.
     /// </summary>
-    public class AIChatPanel : EditorPanel
+    public class AIChatPanel : EditorWindow
     {
-        private const int PanelWidth = 350;
+        private const int DefaultWidth = 380;
+        private const int DefaultHeight = 500;
         private const int InputAreaHeight = 70;
         private const int HeaderHeight = 30;
         private const int Padding = 6;
 
         private readonly AIChatService chatService;
-        private readonly WindowManager windowManager;
 
         private XNALabel lblTitle;
         private XNAListBox lbMessages;
@@ -37,7 +37,6 @@ namespace TSMapEditor.UI
 
         public AIChatPanel(WindowManager windowManager, AIChatService chatService) : base(windowManager)
         {
-            this.windowManager = windowManager;
             this.chatService = chatService ?? throw new ArgumentNullException(nameof(chatService));
 
             chatService.MessageReceived += OnMessageReceived;
@@ -53,12 +52,14 @@ namespace TSMapEditor.UI
         public override void Initialize()
         {
             Name = nameof(AIChatPanel);
-            Width = PanelWidth;
+            Width = DefaultWidth;
+            Height = DefaultHeight;
+            CenterByDefault = false; // Don't auto-center, let user position it
 
             // Header label
             lblTitle = new XNALabel(WindowManager);
             lblTitle.Name = nameof(lblTitle);
-            lblTitle.Text = "AI 助手";
+            lblTitle.Text = "SmartAlert AI 助手";
             lblTitle.FontIndex = Constants.UIBoldFont;
             lblTitle.X = Padding;
             lblTitle.Y = Padding;
@@ -67,8 +68,8 @@ namespace TSMapEditor.UI
             // Settings button (top right)
             btnSettings = new EditorButton(WindowManager);
             btnSettings.Name = nameof(btnSettings);
-            btnSettings.Text = "⚙";
-            btnSettings.Width = 30;
+            btnSettings.Text = "设置";
+            btnSettings.Width = 40;
             btnSettings.X = Width - btnSettings.Width - Padding;
             btnSettings.Y = Padding - 2;
             btnSettings.LeftClick += (s, e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
@@ -103,7 +104,7 @@ namespace TSMapEditor.UI
             // Status label
             lblStatus = new XNALabel(WindowManager);
             lblStatus.Name = nameof(lblStatus);
-            lblStatus.Text = chatService.IsConfigured ? "就绪" : "未配置 - 请点击 ⚙ 设置";
+            lblStatus.Text = chatService.IsConfigured ? "就绪 | Ctrl+Shift+A 切换" : "未配置 - 请点击「设置」";
             lblStatus.X = Padding;
             lblStatus.Y = lbMessages.Bottom + 2;
             lblStatus.ClientRectangle = new Rectangle(Padding, lbMessages.Bottom + 2, Width - Padding * 2, 16);
@@ -133,23 +134,9 @@ namespace TSMapEditor.UI
             // Welcome message
             AddSystemMessage("欢迎使用 SmartAlert AI 助手！");
             AddSystemMessage("输入自然语言指令来编辑地图。");
+            AddSystemMessage("窗口可以拖拽移动。");
             if (!chatService.IsConfigured)
-                AddSystemMessage("请先点击 ⚙ 配置 AI 服务。");
-        }
-
-        /// <summary>
-        /// Refreshes the layout when the panel is resized.
-        /// </summary>
-        public void RefreshLayout()
-        {
-            if (lbMessages == null)
-                return;
-
-            lbMessages.Height = Height - HeaderHeight - InputAreaHeight - Padding * 2;
-            lblStatus.Y = lbMessages.Bottom + 2;
-            lblStatus.ClientRectangle = new Rectangle(Padding, lbMessages.Bottom + 2, Width - Padding * 2, 16);
-            tbInput.Y = Height - Constants.UITextBoxHeight - Padding;
-            btnSend.Y = tbInput.Y - 1;
+                AddSystemMessage("请先点击「设置」配置 AI 服务。");
         }
 
         private void SendMessage()
@@ -182,6 +169,9 @@ namespace TSMapEditor.UI
             bool first = true;
             foreach (string line in lines)
             {
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
                 var item = new XNAListBoxItem();
                 item.Text = first ? "AI: " + line : "    " + line;
                 item.TextColor = new Color(180, 255, 180);
@@ -249,6 +239,10 @@ namespace TSMapEditor.UI
         public override void Update(GameTime gameTime)
         {
             base.Update(gameTime);
+
+            // Process pending map operations on the main thread
+            // This is critical: mutations must run on the game thread for rendering to refresh
+            chatService.ProcessPendingOperations();
 
             lock (pendingLock)
             {

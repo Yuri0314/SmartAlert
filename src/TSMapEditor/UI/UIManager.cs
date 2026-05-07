@@ -239,6 +239,20 @@ namespace TSMapEditor.UI
             AddChild(aiSettingsWindow);
             aiSettingsWindow.Disable();
 
+            // AI toggle button - placed at the right end of the top bar, before the tile info display
+            var btnToggleAI = new EditorButton(WindowManager);
+            btnToggleAI.Name = "btnToggleAI";
+            btnToggleAI.Text = "AI 助手";
+            btnToggleAI.Width = 70;
+            btnToggleAI.Height = Constants.UITopBarMenuHeight;
+            // Position it to the left of the tile info display area
+            btnToggleAI.X = WindowManager.RenderResolutionX - tileInfoDisplay.Width - btnToggleAI.Width - 4;
+            btnToggleAI.Y = 0;
+            btnToggleAI.DrawOrder = 900;
+            btnToggleAI.UpdateOrder = 900;
+            btnToggleAI.LeftClick += (s, e) => ToggleAIChatPanel();
+            AddChild(btnToggleAI);
+
             Keyboard.OnKeyPressed += AIChatKeyHandler;
         }
 
@@ -259,7 +273,6 @@ namespace TSMapEditor.UI
             if (isAIChatPanelVisible)
             {
                 aiChatPanel.Enable();
-                aiChatPanel.RefreshLayout();
             }
             else
             {
