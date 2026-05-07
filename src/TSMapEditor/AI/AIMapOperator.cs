@@ -134,7 +134,15 @@ namespace TSMapEditor.AI
             // Resolve the ININame
             string resolvedININame = ResolveObjectININame(op.ObjectName, objectType);
             if (resolvedININame == null)
-                return $"找不到{GetObjectTypeName(objectType)}: \"{op.ObjectName}\"";
+            {
+                // Generate "did you mean?" suggestions
+                var suggestions = FindSimilarNames(op.ObjectName, objectType, 5);
+                string typeName = GetObjectTypeName(objectType);
+                if (suggestions.Count > 0)
+                    return $"找不到{typeName}: \"{op.ObjectName}\"。你是否要找: {string.Join(", ", suggestions)}";
+                else
+                    return $"找不到{typeName}: \"{op.ObjectName}\"";
+            }
 
             // Resolve owner house
             House owner = ResolveOwner(op.Owner);
@@ -379,6 +387,71 @@ namespace TSMapEditor.AI
                 case AIPlaceObjectType.Infantry: return "步兵";
                 default: return "对象";
             }
+        }
+
+        /// <summary>
+        /// Finds type names similar to the given name, for "did you mean?" suggestions.
+        /// Uses substring overlap scoring: types whose ININame or display name contain
+        /// parts of the search term (or vice versa) are ranked higher.
+        /// </summary>
+        private List<string> FindSimilarNames(string name, AIPlaceObjectType objectType, int maxResults)
+        {
+            List<TechnoType> types;
+            switch (objectType)
+            {
+                case AIPlaceObjectType.Building:
+                    types = map.Rules.BuildingTypes.Cast<TechnoType>().ToList();
+                    break;
+                case AIPlaceObjectType.Vehicle:
+                    types = map.Rules.UnitTypes.Cast<TechnoType>().ToList();
+                    break;
+                case AIPlaceObjectType.Infantry:
+                    types = map.Rules.InfantryTypes.Cast<TechnoType>().ToList();
+                    break;
+                default:
+                    return new List<string>();
+            }
+
+            string nameLower = name.ToLowerInvariant();
+
+            // Score each type by similarity
+            var scored = new List<(string iniName, string displayName, int score)>();
+            foreach (var t in types)
+            {
+                if (!t.EditorVisible)
+                    continue;
+
+                string iniLower = t.ININame.ToLowerInvariant();
+                string displayLower = t.GetEditorDisplayName().ToLowerInvariant();
+                int score = 0;
+
+                // Check substring containment in both directions
+                if (iniLower.Contains(nameLower) || nameLower.Contains(iniLower))
+                    score += 10;
+                if (displayLower.Contains(nameLower) || nameLower.Contains(displayLower))
+                    score += 8;
+
+                // Check common prefix length
+                int prefixLen = 0;
+                int minLen = Math.Min(iniLower.Length, nameLower.Length);
+                for (int i = 0; i < minLen && iniLower[i] == nameLower[i]; i++)
+                    prefixLen++;
+                score += prefixLen;
+
+                if (score > 0)
+                {
+                    string label = t.GetEditorDisplayName() != t.ININame
+                        ? $"{t.ININame} ({t.GetEditorDisplayName()})"
+                        : t.ININame;
+                    scored.Add((t.ININame, label, score));
+                }
+            }
+
+            return scored
+                .OrderByDescending(s => s.score)
+                .Take(maxResults)
+                .Select(s => s.displayName)
+                .ToList();
         }
 
         /// <summary>
