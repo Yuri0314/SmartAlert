@@ -360,5 +360,43 @@ namespace TSMapEditor.Tests
             Assert.Contains("message", prompt);
             Assert.Contains("operations", prompt);
         }
+
+        [Fact]
+        public void BuildSystemPrompt_ContainsCompositionGuidelines()
+        {
+            string prompt = IntentParser.BuildSystemPrompt("");
+
+            // Should contain high-level task composition guidelines
+            Assert.Contains("复杂任务组合指南", prompt);
+            Assert.Contains("建一个基地", prompt);
+            Assert.Contains("铺设矿区", prompt);
+            Assert.Contains("布置装饰", prompt);
+            Assert.Contains("创建完整对战地图", prompt);
+        }
+
+        [Fact]
+        public void Parse_ComplexBaseLayout_ParsesMultipleOperations()
+        {
+            // Simulate what AI would return for "建一个盟军基地"
+            string json = @"{
+                ""message"": ""已为盟军建立基地"",
+                ""operations"": [
+                    { ""type"": ""place_building"", ""x"": 50, ""y"": 50, ""objectName"": ""GACNST"", ""owner"": ""Americans"" },
+                    { ""type"": ""place_building"", ""x"": 53, ""y"": 50, ""objectName"": ""GAREFN"", ""owner"": ""Americans"" },
+                    { ""type"": ""place_building"", ""x"": 47, ""y"": 50, ""objectName"": ""GAWEAP"", ""owner"": ""Americans"" },
+                    { ""type"": ""place_building"", ""x"": 50, ""y"": 53, ""objectName"": ""GAPOWR"", ""owner"": ""Americans"" },
+                    { ""type"": ""place_building"", ""x"": 50, ""y"": 47, ""objectName"": ""GAPOWR"", ""owner"": ""Americans"" },
+                    { ""type"": ""set_waypoint"", ""x"": 50, ""y"": 50, ""waypointIndex"": 0 },
+                    { ""type"": ""place_overlay"", ""x"": 55, ""y"": 55, ""width"": 10, ""height"": 10, ""objectName"": ""INTIB01"" }
+                ]
+            }";
+
+            var (message, ops) = IntentParser.Parse(json);
+
+            Assert.Equal(7, ops.Count);
+            Assert.Equal(5, ops.Count(o => o.Type == "place_building"));
+            Assert.Equal(1, ops.Count(o => o.Type == "set_waypoint"));
+            Assert.Equal(1, ops.Count(o => o.Type == "place_overlay"));
+        }
     }
 }

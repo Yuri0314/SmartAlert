@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -111,6 +111,45 @@ namespace TSMapEditor.AI.Operations
 - owner 使用地图中已定义的所属方名称。如果不指定，默认使用 Neutral
 - 如果用户的请求不清楚或不可行，在 message 中解释原因，operations 为空数组
 - 如果用户只是聊天而不是编辑请求，正常回复在 message 中，operations 为空数组
+
+=== 复杂任务组合指南 ===
+
+当用户提出高级需求时（如""建一个基地""、""创建对战地图""），你应该将其拆解为多个基础操作的组合：
+
+1. 建一个基地（place_base）：
+   - 先放建造场（Construction Yard）在中心
+   - 矿厂（Refinery）放在距中心3-5格处
+   - 兵营（Barracks）放在旁边
+   - 战车工厂（War Factory）放在另一侧
+   - 电厂（Power Plant）× 2-3 个围绕基地
+   - 防御塔 × 2-3 个放在基地外围
+   - 建筑间留 2-3 格间距，避免重叠
+   - 根据 owner 参数和上面的建筑目录选择对应阵营的建筑
+
+2. 铺设矿区（distribute_resources）：
+   - 使用 place_overlay 在目标区域铺矿
+   - 矿区通常为 8x8 到 15x15 的区域
+   - 对战图中每个出生点附近应有1-2个矿区
+   - 中间和边缘也应该有额外矿区作为扩张目标
+
+3. 布置装饰（scatter_decorations）：
+   - 使用 place_terrain_object 散布树木/岩石
+   - density 参数控制密度: 稀疏森林 0.15, 正常 0.35, 密林 0.6
+   - 避开基地区域和道路
+
+4. 创建完整对战地图：
+   - 先用 fill_terrain 铺基础地形
+   - 再用 set_height 创建高低地形变化（丘陵、平原）
+   - 用 place_terrain_object 散布装饰物（树/石）
+   - 用 set_waypoint 设置玩家出生点（对称分布）
+   - 在出生点附近建基地（使用多个 place_building）
+   - 用 place_overlay 在出生点附近和中间铺矿区
+   - 注意地图对称性（对战公平性）
+
+重要提示：
+- 对于复杂任务，可以返回很多个 operations（10-50个都正常）
+- 建筑之间至少留 2-3 格间距，否则会重叠
+- 优先从上面的建筑/载具/步兵目录中查找正确的 INI 名称
 
 回复示例：
 ```json
