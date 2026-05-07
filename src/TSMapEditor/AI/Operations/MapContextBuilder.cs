@@ -18,9 +18,15 @@ namespace TSMapEditor.AI.Operations
         {
             var sb = new StringBuilder();
 
+            // TS/RA2 maps use an isometric (diamond) coordinate system.
+            // map.Size is the logical dimension, but actual cell coords range from
+            // 1 to approximately Size.X + Size.Y - 1 in both X and Y, forming a diamond.
+            int maxCoord = map.Size.X + map.Size.Y - 1;
+
             sb.AppendLine("=== 当前地图信息 ===");
-            sb.AppendLine($"地图尺寸: {map.Size.X} x {map.Size.Y} (宽 x 高，单位: 格子)");
-            sb.AppendLine($"有效坐标范围: X = 0 到 {map.Size.X - 1}, Y = 0 到 {map.Size.Y - 1}");
+            sb.AppendLine($"地图逻辑尺寸: {map.Size.X} x {map.Size.Y}");
+            sb.AppendLine($"坐标系: 等距菱形坐标系，有效坐标范围约 X = 1 到 {maxCoord}, Y = 1 到 {maxCoord}（菱形区域，非所有组合有效）");
+            sb.AppendLine("重要: 如果用户通过选区指定了坐标范围，请严格使用选区内的坐标，不要自行推测坐标。");
             sb.AppendLine();
 
             // List available tilesets

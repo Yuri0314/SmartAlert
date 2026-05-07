@@ -82,20 +82,30 @@ namespace TSMapEditor.AI
 
         private string ExecuteFillTerrain(MapOperation op)
         {
-            // Validate coordinates
-            if (op.X < 0 || op.Y < 0 || op.Width <= 0 || op.Height <= 0)
-                return $"无效的坐标或尺寸: ({op.X},{op.Y}) {op.Width}x{op.Height}";
+            // Validate basic parameters
+            if (op.Width <= 0 || op.Height <= 0)
+                return $"无效的尺寸: {op.Width}x{op.Height}";
 
-            // Clamp to map bounds
-            int maxX = Math.Min(op.X + op.Width, map.Size.X);
-            int maxY = Math.Min(op.Y + op.Height, map.Size.Y);
-            int startX = Math.Max(0, op.X);
-            int startY = Math.Max(0, op.Y);
-            int actualWidth = maxX - startX;
-            int actualHeight = maxY - startY;
+            // Use coordinates as-is — the AITerrainMutation uses Map.GetTile()
+            // which safely returns null for cells outside the isometric diamond.
+            // No need to clamp to map.Size (which is NOT the coord range for isometric maps).
+            int startX = Math.Max(1, op.X);
+            int startY = Math.Max(1, op.Y);
+            int actualWidth = op.Width;
+            int actualHeight = op.Height;
 
-            if (actualWidth <= 0 || actualHeight <= 0)
-                return $"坐标超出地图范围: ({op.X},{op.Y})";
+            // Sanity check: at least one cell in the area should be valid
+            bool anyValid = false;
+            for (int dy = 0; dy < actualHeight && !anyValid; dy++)
+            {
+                for (int dx = 0; dx < actualWidth && !anyValid; dx++)
+                {
+                    if (map.GetTile(startX + dx, startY + dy) != null)
+                        anyValid = true;
+                }
+            }
+            if (!anyValid)
+                return $"坐标 ({startX},{startY}) {actualWidth}x{actualHeight} 完全超出地图有效区域";
 
             // Find the tileset by name
             int tileIndex = FindTileIndexByName(op.TileSetName);
@@ -157,11 +167,12 @@ namespace TSMapEditor.AI
             if (overlayType == null)
                 return $"找不到 overlay 类型: \"{op.ObjectName}\"";
 
-            // Validate area
+            // Use coordinates as-is — the mutation uses Map.GetTile()
+            // which safely handles the isometric diamond bounds.
             int width = Math.Max(1, op.Width);
             int height = Math.Max(1, op.Height);
-            int startX = Math.Max(0, Math.Min(op.X, map.Size.X - 1));
-            int startY = Math.Max(0, Math.Min(op.Y, map.Size.Y - 1));
+            int startX = Math.Max(1, op.X);
+            int startY = Math.Max(1, op.Y);
 
             var mutation = new AIPlaceOverlayMutation(mutationTarget, overlayType,
                 startX, startY, width, height,
@@ -285,10 +296,35 @@ namespace TSMapEditor.AI
 
             if (count == 1)
             {
-                // Single object: place at the specified position
-                int px = Math.Max(0, Math.Min(x, map.Size.X - 1));
-                int py = Math.Max(0, Math.Min(y, map.Size.Y - 1));
-                positions.Add(new Point2D(px, py));
+                // Single object: place at the specified coordinate directly.
+                // Use Map.GetTile() to verify the cell exists in the isometric grid.
+                var coord = new Point2D(x, y);
+                if (map.GetTile(coord) != null)
+                {
+                    positions.Add(coord);
+                }
+                else
+                {
+                    // If exact cell is invalid, search nearby (spiral outward)
+                    for (int radius = 1; radius <= 5 && positions.Count == 0; radius++)
+                    {
+                        for (int dy = -radius; dy <= radius; dy++)
+                        {
+                            for (int dx = -radius; dx <= radius; dx++)
+                            {
+                                if (Math.Abs(dx) != radius && Math.Abs(dy) != radius)
+                                    continue;
+                                var candidate = new Point2D(x + dx, y + dy);
+                                if (map.GetTile(candidate) != null)
+                                {
+                                    positions.Add(candidate);
+                                    break;
+                                }
+                            }
+                            if (positions.Count > 0) break;
+                        }
+                    }
+                }
             }
             else
             {
@@ -306,10 +342,27 @@ namespace TSMapEditor.AI
                     int cx = x + (i % areaW);
                     int cy = y + (i / areaW);
 
-                    if (cx >= 0 && cx < map.Size.X && cy >= 0 && cy < map.Size.Y)
+                    // Use GetTile to check the isometric diamond bounds
+                    if (map.GetTile(cx, cy) != null)
                     {
                         positions.Add(new Point2D(cx, cy));
                         placed++;
+                    }
+                }
+
+                // If step was too large and we didn't place enough, try filling sequentially
+                if (placed < count)
+                {
+                    for (int i = 0; i < totalCells && placed < count; i++)
+                    {
+                        int cx = x + (i % areaW);
+                        int cy = y + (i / areaW);
+                        var pt = new Point2D(cx, cy);
+                        if (map.GetTile(cx, cy) != null && !positions.Contains(pt))
+                        {
+                            positions.Add(pt);
+                            placed++;
+                        }
                     }
                 }
             }
