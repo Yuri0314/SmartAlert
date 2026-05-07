@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Rampastring.Tools;
 using TSMapEditor.AI.Operations;
+using TSMapEditor.GameMath;
 using TSMapEditor.Models;
 using TSMapEditor.Mutations;
 using TSMapEditor.Rendering;
@@ -60,6 +61,28 @@ namespace TSMapEditor.AI
         /// Whether the service is configured and ready to use.
         /// </summary>
         public bool IsConfigured => config?.IsConfigured ?? false;
+
+        /// <summary>
+        /// The currently selected map region (set by AISelectionCursorAction).
+        /// Null means no selection is active.
+        /// </summary>
+        public AISelection CurrentSelection { get; private set; }
+
+        /// <summary>
+        /// Sets the current selection region.
+        /// </summary>
+        public void SetSelection(int x, int y, int width, int height)
+        {
+            CurrentSelection = new AISelection(x, y, width, height);
+        }
+
+        /// <summary>
+        /// Clears the current selection.
+        /// </summary>
+        public void ClearSelection()
+        {
+            CurrentSelection = null;
+        }
 
         /// <summary>
         /// The current configuration.
@@ -184,8 +207,15 @@ namespace TSMapEditor.AI
                 return;
             }
 
-            // Add user message to history
-            chatHistory.Add(ChatMessage.User(userMessage));
+            // Augment user message with selection context if present
+            string augmentedMessage = userMessage;
+            if (CurrentSelection != null)
+            {
+                augmentedMessage += $"\n[当前选区: 起点({CurrentSelection.X},{CurrentSelection.Y}) 大小{CurrentSelection.Width}x{CurrentSelection.Height}，请在此区域内操作]";
+            }
+
+            // Add augmented message to history (AI sees selection context)
+            chatHistory.Add(ChatMessage.User(augmentedMessage));
 
             // Start async processing
             IsBusy = true;

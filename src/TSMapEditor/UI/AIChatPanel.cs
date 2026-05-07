@@ -199,6 +199,36 @@ namespace TSMapEditor.UI
             ScrollToBottom();
         }
 
+        /// <summary>
+        /// Shows selection info in the chat panel when AI selection is completed.
+        /// </summary>
+        public void ShowSelectionInfo(int x, int y, int width, int height)
+        {
+            var item = new XNAListBoxItem();
+            item.Text = $"◆ 已选区域: ({x},{y}) {width}×{height}";
+            item.TextColor = new Color(0, 220, 220); // Cyan
+            lbMessages.AddItem(item);
+
+            var hintItem = new XNAListBoxItem();
+            hintItem.Text = "  输入指令对选区操作（如\"种满矿石\"）";
+            hintItem.TextColor = new Color(150, 150, 150);
+            lbMessages.AddItem(hintItem);
+
+            ScrollToBottom();
+        }
+
+        /// <summary>
+        /// Clears the selection indicator in the chat panel.
+        /// </summary>
+        public void ClearSelectionInfo()
+        {
+            var item = new XNAListBoxItem();
+            item.Text = "◇ 选区已清除";
+            item.TextColor = new Color(120, 120, 120);
+            lbMessages.AddItem(item);
+            ScrollToBottom();
+        }
+
         private void ScrollToBottom()
         {
             if (lbMessages.Items.Count > 0)

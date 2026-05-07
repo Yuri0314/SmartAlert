@@ -95,6 +95,7 @@ namespace TSMapEditor.UI
         private AIChatService aiChatService;
         private AIChatPanel aiChatPanel;
         private AISettingsWindow aiSettingsWindow;
+        private AISelectionCursorAction aiSelectionCursorAction;
         private bool isAIChatPanelVisible = false;
 
         public void SetAutoUpdateChildOrder(bool value) => AutoUpdateChildOrder = value;
@@ -166,6 +167,7 @@ namespace TSMapEditor.UI
             topBarMenu.OnFileSelected += OpenMapWindow_OnFileSelected;
             topBarMenu.MapWideOverlayLoadRequested += TopBarMenu_MapWideOverlayLoadRequested;
             topBarMenu.AIAssistantToggleRequested += (s, e) => ToggleAIChatPanel();
+            topBarMenu.AISelectionRequested += (s, e) => StartAISelection();
             AddChild(topBarMenu);
 
             var editorControlsPanel = new EditorControlsPanel(WindowManager, map, theaterGraphics,
@@ -237,6 +239,21 @@ namespace TSMapEditor.UI
             aiSettingsWindow.Disable();
 
             Keyboard.OnKeyPressed += AIChatKeyHandler;
+
+            // Initialize AI selection cursor action
+            aiSelectionCursorAction = new AISelectionCursorAction(mapUI);
+            aiSelectionCursorAction.SelectionCompleted += AISelection_Completed;
+        }
+
+        private void AISelection_Completed(object sender, AISelectionEventArgs e)
+        {
+            aiChatService.SetSelection(e.X, e.Y, e.Width, e.Height);
+
+            // Show the chat panel with selection info
+            if (!isAIChatPanelVisible)
+                ToggleAIChatPanel();
+
+            aiChatPanel.ShowSelectionInfo(e.X, e.Y, e.Width, e.Height);
         }
 
         private void AIChatKeyHandler(object sender, Rampastring.XNAUI.Input.KeyPressEventArgs e)
@@ -245,6 +262,13 @@ namespace TSMapEditor.UI
             if (e.PressedKey == Keys.A && Keyboard.IsCtrlHeldDown() && Keyboard.IsShiftHeldDown())
             {
                 ToggleAIChatPanel();
+                e.Handled = true;
+            }
+
+            // Ctrl+Shift+S starts AI selection mode
+            if (e.PressedKey == Keys.S && Keyboard.IsCtrlHeldDown() && Keyboard.IsShiftHeldDown())
+            {
+                StartAISelection();
                 e.Handled = true;
             }
         }
@@ -267,6 +291,11 @@ namespace TSMapEditor.UI
         {
             aiSettingsWindow.Enable();
             aiSettingsWindow.CenterOnParent();
+        }
+
+        private void StartAISelection()
+        {
+            editorState.CursorAction = aiSelectionCursorAction;
         }
 
         private void SetInitialDisplayMode()
