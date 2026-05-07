@@ -245,18 +245,19 @@ namespace TSMapEditor.CCEngine
 
         public byte[] LoadFile(string name)
         {
-            if (UserSettings.Instance.LogFileLoading)
-                Logger.Log("Loading file " + name);
+            bool isRulesFile = name.IndexOf("rules", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (UserSettings.Instance.LogFileLoading || isRulesFile)
+                Logger.Log("LoadFile: " + name);
 
             foreach (string searchDirectory in searchDirectories)
             {
                 string looseFilePath = Path.Combine(searchDirectory, name);
                 if (File.Exists(looseFilePath))
                 {
-                    if (UserSettings.Instance.LogFileLoading)
-                        Logger.Log("    File found from " + searchDirectory);
-
-                    return File.ReadAllBytes(looseFilePath);
+                    var data = File.ReadAllBytes(looseFilePath);
+                    Logger.Log($"    File found from disk: {searchDirectory} (size={data.Length} bytes)");
+                    return data;
                 }
             }
 
@@ -264,14 +265,14 @@ namespace TSMapEditor.CCEngine
 
             if (fileLocationInfos.TryGetValue(id, out FileLocationInfo value))
             {
-                if (UserSettings.Instance.LogFileLoading)
-                    Logger.Log("    File found from " + Path.GetFileName(value.MixFile.FilePath));
-
-                return value.MixFile.GetSingleFileData(value.Offset, value.Size);
+                var data = value.MixFile.GetSingleFileData(value.Offset, value.Size);
+                if (isRulesFile)
+                    Logger.Log($"    File found from MIX: {Path.GetFileName(value.MixFile.FilePath)} (size={data.Length} bytes, offset={value.Offset})");
+                return data;
             }
 
-            if (UserSettings.Instance.LogFileLoading)
-                Logger.Log("    FAILED to find file: " + name);
+            if (isRulesFile)
+                Logger.Log($"    FAILED to find file: {name} (hash={id})");
 
             return null;
         }
@@ -287,6 +288,7 @@ namespace TSMapEditor.CCEngine
                 case "$RA2ELOCAL":
                 case "$EXPAND":
                 case "$EXPANDMD":
+                case "$EXPANDMO":
                     return true;
                 default:
                     return false;
@@ -315,6 +317,9 @@ namespace TSMapEditor.CCEngine
                     break;
                 case "$EXPANDMD":
                     LoadIndexedMixFiles("expandmd");
+                    break;
+                case "$EXPANDMO":
+                    LoadWildcardMixFiles("expandmo*.mix");
                     break;
             }
         }

@@ -103,7 +103,7 @@ namespace TSMapEditor.AI.Operations
             }
 
             sb.AppendLine();
-            sb.AppendLine("注意: 放置单位/建筑时 owner 使用上面的所属方名称。不指定时默认 Neutral。");
+            sb.AppendLine("重要: 放置单位/建筑时 owner 必须使用上面列出的所属方名称之一！不要自己编造名称。不指定时默认 Neutral。");
             sb.AppendLine();
         }
 

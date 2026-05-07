@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text;
 using System.Collections.Generic;
 using Rampastring.Tools;
@@ -85,7 +85,12 @@ public class IniFileEx: IniFile
     public void Include(CCFileManager ccFileManager)
     {
         if (!Constants.EnableIniInclude)
+        {
+            Logger.Log("IniFileEx.Include: Skipping - EnableIniInclude is false");
             return;
+        }
+
+        Logger.Log($"IniFileEx.Include: Checking file '{FileName ?? "(stream)"}' for include sections...");
 
         string sectionName;
         if (SectionExists(PhobosIncludeSection))
@@ -93,7 +98,12 @@ public class IniFileEx: IniFile
         else if (SectionExists(AresIncludeSection))
             sectionName = AresIncludeSection;
         else
+        {
+            Logger.Log("IniFileEx.Include: No include section found.");
             return;
+        }
+
+        Logger.Log($"IniFileEx.Include: Found section '{sectionName}' with {GetSection(sectionName).Keys.Count} entries.");
 
         foreach (var pair in GetSection(sectionName).Keys)
         {

@@ -431,30 +431,66 @@ namespace TSMapEditor.AI
             return scored.OrderByDescending(s => s.score).Take(maxResults).Select(s => s.label).ToList();
         }
 
+        // Common alias mappings: AI often uses these names instead of the exact house INI names
+        private static readonly Dictionary<string, string[]> OwnerAliases = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Soviet",      new[] { "Russians", "Soviet", "苏联", "苏维埃" } },
+            { "Russians",    new[] { "Russians", "Soviet", "苏联", "苏维埃" } },
+            { "苏联",        new[] { "Russians", "Soviet" } },
+            { "Allied",      new[] { "Americans", "Allied", "盟军" } },
+            { "Americans",   new[] { "Americans", "Allied", "盟军" } },
+            { "盟军",        new[] { "Americans", "Allied" } },
+            { "Yuri",        new[] { "YuriCountry", "Yuri", "尤里" } },
+            { "YuriCountry", new[] { "YuriCountry", "Yuri", "尤里" } },
+            { "尤里",        new[] { "YuriCountry", "Yuri" } },
+            { "Foehn",       new[] { "Foehn", "焚风" } },
+            { "焚风",        new[] { "Foehn" } },
+            { "Epsilon",     new[] { "Epsilon", "心灵军团", "厄普西隆" } },
+            { "心灵军团",    new[] { "Epsilon" } },
+            { "GDI",         new[] { "Americans", "Allied" } },
+            { "Nod",         new[] { "Russians", "Soviet" } },
+            { "Confederate", new[] { "Americans", "Allied" } },
+            { "Russia",      new[] { "Russians" } },
+            { "America",     new[] { "Americans" } },
+        };
+
         private House ResolveOwner(string ownerName)
         {
             var houses = map.GetHouses();
 
             if (string.IsNullOrWhiteSpace(ownerName))
             {
-                // Default to first house or Neutral
                 return houses.Find(h => h.ININame == "Neutral") ?? (houses.Count > 0 ? houses[0] : null);
             }
 
-            // Exact match
+            // 1. Exact match
             var exact = houses.Find(h => h.ININame == ownerName);
             if (exact != null) return exact;
 
-            // Case-insensitive
+            // 2. Case-insensitive match
             var ci = houses.Find(h => h.ININame.Equals(ownerName, StringComparison.OrdinalIgnoreCase));
             if (ci != null) return ci;
 
-            // Partial match
+            // 3. Partial match (either direction)
             var partial = houses.Find(h =>
-                h.ININame.IndexOf(ownerName, StringComparison.OrdinalIgnoreCase) >= 0);
+                h.ININame.IndexOf(ownerName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                ownerName.IndexOf(h.ININame, StringComparison.OrdinalIgnoreCase) >= 0);
             if (partial != null) return partial;
 
-            // Fallback: first house
+            // 4. Alias lookup
+            if (OwnerAliases.TryGetValue(ownerName, out var aliases))
+            {
+                foreach (var alias in aliases)
+                {
+                    var aliasMatch = houses.Find(h =>
+                        h.ININame.Equals(alias, StringComparison.OrdinalIgnoreCase) ||
+                        h.ININame.IndexOf(alias, StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (aliasMatch != null) return aliasMatch;
+                }
+            }
+
+            // 5. Fallback: first house
+            Logger.Log($"AIMapOperator: Could not resolve owner '{ownerName}', falling back to first house.");
             return houses.Count > 0 ? houses[0] : null;
         }
 
