@@ -194,8 +194,6 @@ namespace TSMapEditor.UI.TopBar
             viewContextMenu.AddItem(Translate(this, "View.ToggleLightDisabledBuildings", "Toggle Light From Disabled Buildings"), () => mapUI.EditorState.LightDisabledLightSources = !mapUI.EditorState.LightDisabledLightSources);
             viewContextMenu.AddItem(" ", null, () => false, null, null);
             viewContextMenu.AddItem(Translate(this, "View.ToggleFullscreenMode", "Toggle Fullscreen Mode"), () => KeyboardCommands.Instance.ToggleFullscreen.DoTrigger());
-            viewContextMenu.AddItem(" ", null, () => false, null, null);
-            viewContextMenu.AddItem("AI 助手 (Ctrl+Shift+A)", () => AIAssistantToggleRequested?.Invoke(this, EventArgs.Empty));
 
             var viewButton = new MenuButton(WindowManager, viewContextMenu);
             viewButton.Name = nameof(viewButton);
@@ -229,6 +227,8 @@ namespace TSMapEditor.UI.TopBar
             toolsContextMenu.AddItem(Translate(this, "Tools.LoadMapWideOverlay", "Load Map-Wide Overlay..."), () => MapWideOverlayLoadRequested?.Invoke(this, EventArgs.Empty), null, null, null, null);
             toolsContextMenu.AddItem(" ", null, () => false, null, null);
             toolsContextMenu.AddItem(Translate(this, "Tools.ConfigureHotkeys", "Configure Hotkeys..."), () => windowController.HotkeyConfigurationWindow.Open(), null, null, null);
+            toolsContextMenu.AddItem(" ", null, () => false, null, null);
+            toolsContextMenu.AddItem("AI 助手 (Ctrl+Shift+A)", () => AIAssistantToggleRequested?.Invoke(this, EventArgs.Empty));
             toolsContextMenu.AddItem(" ", null, () => false, null, null);
             toolsContextMenu.AddItem(Translate(this, "Tools.About", "About"), () => windowController.AboutWindow.Open(), null, null, null, null);
 
