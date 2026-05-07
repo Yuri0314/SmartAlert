@@ -211,7 +211,9 @@ namespace TSMapEditor.AI
             string augmentedMessage = userMessage;
             if (CurrentSelection != null)
             {
-                augmentedMessage += $"\n[当前选区: 起点({CurrentSelection.X},{CurrentSelection.Y}) 大小{CurrentSelection.Width}x{CurrentSelection.Height}，请在此区域内操作]";
+                int endX = CurrentSelection.X + CurrentSelection.Width - 1;
+                int endY = CurrentSelection.Y + CurrentSelection.Height - 1;
+                augmentedMessage += $"\n[当前选区约束: X范围 {CurrentSelection.X}~{endX}, Y范围 {CurrentSelection.Y}~{endY}。请务必在此范围内生成坐标]";
             }
 
             // Add augmented message to history (AI sees selection context)

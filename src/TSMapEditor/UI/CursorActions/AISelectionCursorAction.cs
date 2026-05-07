@@ -42,31 +42,35 @@ namespace TSMapEditor.UI.CursorActions
             StartCellCoords = null;
         }
 
+        private bool selectionActive = false;
+        private int currentStartX, currentStartY, currentEndX, currentEndY;
+
         public override void LeftClick(Point2D cellCoords)
         {
-            if (StartCellCoords == null)
+            if (StartCellCoords == null || selectionActive)
             {
-                // First click: set starting corner
+                // First click (or new click after previous selection): set starting corner
                 StartCellCoords = cellCoords;
+                selectionActive = false;
                 return;
             }
 
             // Second click: complete the selection
             Point2D start = StartCellCoords.Value;
-            int startX = Math.Min(cellCoords.X, start.X);
-            int startY = Math.Min(cellCoords.Y, start.Y);
-            int endX = Math.Max(cellCoords.X, start.X);
-            int endY = Math.Max(cellCoords.Y, start.Y);
+            currentStartX = Math.Min(cellCoords.X, start.X);
+            currentStartY = Math.Min(cellCoords.Y, start.Y);
+            currentEndX = Math.Max(cellCoords.X, start.X);
+            currentEndY = Math.Max(cellCoords.Y, start.Y);
 
-            int width = endX - startX + 1;
-            int height = endY - startY + 1;
+            int width = currentEndX - currentStartX + 1;
+            int height = currentEndY - currentStartY + 1;
+
+            selectionActive = true;
 
             // Raise the event
-            SelectionCompleted?.Invoke(this, new AISelectionEventArgs(startX, startY, width, height));
+            SelectionCompleted?.Invoke(this, new AISelectionEventArgs(currentStartX, currentStartY, width, height));
 
-            // Reset and exit the action
-            StartCellCoords = null;
-            ExitAction();
+            // Do NOT exit the action, so the preview stays on screen
         }
 
         public override void DrawPreview(Point2D cellCoords, Point2D cameraTopLeftPoint)
@@ -78,12 +82,25 @@ namespace TSMapEditor.UI.CursorActions
                 return;
             }
 
-            // After first click: draw rectangle preview from start to current cursor
-            Point2D start = StartCellCoords.Value;
-            int startY = Math.Min(cellCoords.Y, start.Y);
-            int endY = Math.Max(cellCoords.Y, start.Y);
-            int startX = Math.Min(cellCoords.X, start.X);
-            int endX = Math.Max(cellCoords.X, start.X);
+            int startY, endY, startX, endX;
+
+            if (selectionActive)
+            {
+                // Selection is complete, draw the locked rectangle
+                startX = currentStartX;
+                startY = currentStartY;
+                endX = currentEndX;
+                endY = currentEndY;
+            }
+            else
+            {
+                // After first click, before second click: draw rectangle preview from start to current cursor
+                Point2D start = StartCellCoords.Value;
+                startY = Math.Min(cellCoords.Y, start.Y);
+                endY = Math.Max(cellCoords.Y, start.Y);
+                startX = Math.Min(cellCoords.X, start.X);
+                endX = Math.Max(cellCoords.X, start.X);
+            }
 
             Func<Point2D, Map, Point2D> func = Is2DMode
                 ? CellMath.CellTopLeftPointFromCellCoords
@@ -111,8 +128,19 @@ namespace TSMapEditor.UI.CursorActions
             // Draw size label
             int w = endX - startX + 1;
             int h = endY - startY + 1;
-            DrawText(cellCoords, cameraTopLeftPoint, 0, -20,
-                $"AI 选区: ({startX},{startY}) {w}x{h} — 点击确认", Color.Cyan);
+
+            if (selectionActive)
+            {
+                // Draw label at the top of the selection
+                Point2D centerTop = new Point2D((startX + endX) / 2, startY);
+                DrawText(centerTop, cameraTopLeftPoint, 0, -20,
+                    $"已选区域: ({startX},{startY}) {w}x{h} — 可在聊天框输入指令", Color.Cyan);
+            }
+            else
+            {
+                DrawText(cellCoords, cameraTopLeftPoint, 0, -20,
+                    $"AI 选区: ({startX},{startY}) {w}x{h} — 点击确认", Color.Cyan);
+            }
         }
     }
 
