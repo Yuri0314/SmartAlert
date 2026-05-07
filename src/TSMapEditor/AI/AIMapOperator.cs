@@ -75,6 +75,14 @@ namespace TSMapEditor.AI
                     return ExecutePlaceObject(op, AIPlaceObjectType.Infantry);
                 case "place_overlay":
                     return ExecutePlaceOverlay(op);
+                case "clear_area":
+                    return ExecuteClearArea(op);
+                case "set_height":
+                    return ExecuteSetHeight(op);
+                case "place_terrain_object":
+                    return ExecutePlaceTerrainObject(op);
+                case "set_waypoint":
+                    return ExecuteSetWaypoint(op);
                 default:
                     return $"不支持的操作类型: {op.Type}";
             }
@@ -191,6 +199,92 @@ namespace TSMapEditor.AI
             return $"✓ 已放置 {overlayType.ININame} 在 ({startX},{startY}) 区域 {width}x{height}";
         }
 
+        private string ExecuteClearArea(MapOperation op)
+        {
+            if (op.Width <= 0 || op.Height <= 0)
+                return $"无效的尺寸: {op.Width}x{op.Height}";
+
+            int startX = Math.Max(1, op.X);
+            int startY = Math.Max(1, op.Y);
+
+            var mutation = new AIClearAreaMutation(mutationTarget,
+                startX, startY, op.Width, op.Height,
+                op.Description ?? $"清除 ({startX},{startY}) {op.Width}x{op.Height} 区域");
+
+            mutationManager.PerformMutation(mutation);
+
+            return $"✓ 已清除 ({startX},{startY}) 区域 {op.Width}x{op.Height}";
+        }
+
+        private string ExecuteSetHeight(MapOperation op)
+        {
+            if (op.Width <= 0 || op.Height <= 0)
+                return $"无效的尺寸: {op.Width}x{op.Height}";
+
+            byte targetHeight = (byte)Math.Max(0, Math.Min(14, op.HeightLevel));
+            int startX = Math.Max(1, op.X);
+            int startY = Math.Max(1, op.Y);
+
+            var mutation = new AISetHeightMutation(mutationTarget,
+                startX, startY, op.Width, op.Height, targetHeight,
+                op.Description ?? $"设置高度 {targetHeight} 在 ({startX},{startY}) {op.Width}x{op.Height}");
+
+            mutationManager.PerformMutation(mutation);
+
+            return $"✓ 已设置高度 {targetHeight} 在 ({startX},{startY}) 区域 {op.Width}x{op.Height}";
+        }
+
+        private string ExecutePlaceTerrainObject(MapOperation op)
+        {
+            if (string.IsNullOrWhiteSpace(op.ObjectName))
+                return "缺少地形对象名称 (objectName)";
+
+            if (op.Width <= 0 || op.Height <= 0)
+                return $"无效的尺寸: {op.Width}x{op.Height}";
+
+            // Find terrain type by name (fuzzy matching)
+            var terrainType = FindTerrainType(op.ObjectName);
+            if (terrainType == null)
+            {
+                // Generate suggestions
+                var suggestions = FindSimilarTerrainTypes(op.ObjectName, 5);
+                if (suggestions.Count > 0)
+                    return $"找不到地形对象: \"{op.ObjectName}\"。你是否要找: {string.Join(", ", suggestions)}";
+                else
+                    return $"找不到地形对象: \"{op.ObjectName}\"";
+            }
+
+            int startX = Math.Max(1, op.X);
+            int startY = Math.Max(1, op.Y);
+            float density = (float)Math.Max(0.05, Math.Min(1.0, op.Density));
+
+            var mutation = new AIPlaceTerrainObjectMutation(mutationTarget, terrainType,
+                startX, startY, op.Width, op.Height, density,
+                op.Description ?? $"散布 {terrainType.ININame} 在 ({startX},{startY}) {op.Width}x{op.Height} 密度{density:P0}");
+
+            mutationManager.PerformMutation(mutation);
+
+            return $"✓ 已散布 {terrainType.ININame} 在 ({startX},{startY}) 区域 {op.Width}x{op.Height} 密度{density:P0}";
+        }
+
+        private string ExecuteSetWaypoint(MapOperation op)
+        {
+            int wpIndex = Math.Max(0, Math.Min(99, op.WaypointIndex));
+            var pos = new Point2D(op.X, op.Y);
+
+            // Verify the position is on a valid cell
+            if (map.GetTile(pos) == null)
+                return $"坐标 ({op.X},{op.Y}) 不在地图有效区域内";
+
+            var mutation = new AISetWaypointMutation(mutationTarget, wpIndex, pos,
+                op.Description ?? $"设置路标 {wpIndex} 在 ({op.X},{op.Y})");
+
+            mutationManager.PerformMutation(mutation);
+
+            string wpDesc = wpIndex <= 7 ? $"(玩家{wpIndex + 1}出生点)" : "";
+            return $"✓ 已设置路标 {wpIndex} {wpDesc} 在 ({op.X},{op.Y})";
+        }
+
         // --- Name resolution helpers ---
 
         /// <summary>
@@ -266,6 +360,75 @@ namespace TSMapEditor.AI
             }
 
             return null;
+        }
+
+        private TerrainType FindTerrainType(string name)
+        {
+            var types = map.Rules.TerrainTypes;
+
+            // 1. Exact ININame match
+            var exact = types.Find(t => t.ININame == name);
+            if (exact != null) return exact;
+
+            // 2. Case-insensitive ININame match
+            var ci = types.Find(t => t.ININame.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (ci != null) return ci;
+
+            // 3. Partial match on ININame
+            var partial = types.Find(t =>
+                t.ININame.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (partial != null) return partial;
+
+            // 4. Display name match
+            var displayMatch = types.Find(t =>
+                t.GetEditorDisplayName().IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (displayMatch != null) return displayMatch;
+
+            // 5. Common aliases: "tree" → find any tree type
+            if (name.IndexOf("tree", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("树", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                var tree = types.Find(t => t.ININame.IndexOf("TREE", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (tree != null) return tree;
+            }
+
+            return null;
+        }
+
+        private List<string> FindSimilarTerrainTypes(string name, int maxResults)
+        {
+            string nameLower = name.ToLowerInvariant();
+            var scored = new List<(string label, int score)>();
+
+            foreach (var t in map.Rules.TerrainTypes)
+            {
+                if (!t.EditorVisible) continue;
+
+                string iniLower = t.ININame.ToLowerInvariant();
+                string displayLower = t.GetEditorDisplayName().ToLowerInvariant();
+                int score = 0;
+
+                if (iniLower.Contains(nameLower) || nameLower.Contains(iniLower))
+                    score += 10;
+                if (displayLower.Contains(nameLower) || nameLower.Contains(displayLower))
+                    score += 8;
+
+                int prefixLen = 0;
+                int minLen = Math.Min(iniLower.Length, nameLower.Length);
+                for (int i = 0; i < minLen && iniLower[i] == nameLower[i]; i++)
+                    prefixLen++;
+                score += prefixLen;
+
+                if (score > 0)
+                {
+                    string label = t.GetEditorDisplayName() != t.ININame
+                        ? $"{t.ININame} ({t.GetEditorDisplayName()})"
+                        : t.ININame;
+                    scored.Add((label, score));
+                }
+            }
+
+            return scored.OrderByDescending(s => s.score).Take(maxResults).Select(s => s.label).ToList();
         }
 
         private House ResolveOwner(string ownerName)

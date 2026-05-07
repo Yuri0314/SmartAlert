@@ -6,7 +6,8 @@ namespace TSMapEditor.AI.Operations
     public class MapOperation
     {
         /// <summary>
-        /// Operation type: "fill_terrain", "place_building", "place_unit", "place_infantry", "place_overlay"
+        /// Operation type: "fill_terrain", "place_building", "place_unit", "place_infantry",
+        /// "place_overlay", "clear_area", "set_height", "place_terrain_object", "set_waypoint"
         /// </summary>
         public string Type { get; set; } = string.Empty;
 
@@ -48,7 +49,7 @@ namespace TSMapEditor.AI.Operations
 
         /// <summary>
         /// ININame or display name of the object to place (e.g. "APOC", "E1", "GAPILE").
-        /// Used by place_building, place_unit, place_infantry operations.
+        /// Used by place_building, place_unit, place_infantry, place_terrain_object operations.
         /// </summary>
         public string ObjectName { get; set; } = string.Empty;
 
@@ -63,5 +64,18 @@ namespace TSMapEditor.AI.Operations
         /// Used by place_unit, place_infantry operations.
         /// </summary>
         public int Count { get; set; } = 1;
+
+        /// <summary>
+        /// Waypoint index (0-7 for player spawns).
+        /// Used by set_waypoint operations.
+        /// </summary>
+        public int WaypointIndex { get; set; }
+
+        /// <summary>
+        /// Density for scatter operations (0.0 to 1.0).
+        /// "sparse" = 0.15, "medium" = 0.35, "dense" = 0.6
+        /// Used by place_terrain_object operations.
+        /// </summary>
+        public double Density { get; set; } = 0.35;
     }
 }

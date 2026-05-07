@@ -73,10 +73,41 @@ namespace TSMapEditor.AI.Operations
   ""objectName"": ""overlay名称（矿石用 INTIB01 或 ore）""
 }}
 
+6. clear_area — 清除矩形区域内的所有对象（建筑、载具、步兵、覆盖物、树木等）：
+{{
+  ""type"": ""clear_area"",
+  ""x"": 起始X坐标, ""y"": 起始Y坐标,
+  ""width"": 宽度, ""height"": 高度
+}}
+
+7. set_height — 设置矩形区域的地形高度（0-14，0为最低，14为最高）：
+{{
+  ""type"": ""set_height"",
+  ""x"": 起始X坐标, ""y"": 起始Y坐标,
+  ""width"": 宽度, ""height"": 高度,
+  ""heightLevel"": 目标高度 (0-14)
+}}
+
+8. place_terrain_object — 在区域内散布地形对象（树木、岩石等装饰物）：
+{{
+  ""type"": ""place_terrain_object"",
+  ""x"": 起始X坐标, ""y"": 起始Y坐标,
+  ""width"": 宽度, ""height"": 高度,
+  ""objectName"": ""地形对象INI名称"",
+  ""density"": 密度 (0.0~1.0, 可选, 默认0.35, 稀疏=0.15 中等=0.35 密集=0.6)
+}}
+
+9. set_waypoint — 设置路标点（0-7为玩家出生点）：
+{{
+  ""type"": ""set_waypoint"",
+  ""x"": X坐标, ""y"": Y坐标,
+  ""waypointIndex"": 路标编号 (0=玩家1出生点, 1=玩家2出生点, ...7=玩家8出生点)
+}}
+
 规则：
 - 坐标不能超出地图范围
 - tileSetName 必须是上面列出的可用地形类型的精确名称
-- objectName 使用游戏内部的 INI 名称。如果你不确定准确的名称，用英文缩写或你认为最可能的名称，系统会模糊匹配
+- objectName 使用游戏内部的 INI 名称。系统支持模糊匹配，不确定时填最可能的名称
 - owner 使用地图中已定义的所属方名称。如果不指定，默认使用 Neutral
 - 如果用户的请求不清楚或不可行，在 message 中解释原因，operations 为空数组
 - 如果用户只是聊天而不是编辑请求，正常回复在 message 中，operations 为空数组
@@ -161,6 +192,12 @@ namespace TSMapEditor.AI.Operations
 
                         if (opElement.TryGetProperty("count", out var countProp))
                             op.Count = countProp.GetInt32();
+
+                        if (opElement.TryGetProperty("waypointIndex", out var wpProp))
+                            op.WaypointIndex = wpProp.GetInt32();
+
+                        if (opElement.TryGetProperty("density", out var densProp))
+                            op.Density = densProp.GetDouble();
 
                         operations.Add(op);
                     }

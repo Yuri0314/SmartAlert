@@ -27,6 +27,7 @@ namespace TSMapEditor.AI.Operations
             AppendTileSetCatalog(sb, theaterGraphics);
             AppendHouseList(sb, map);
             AppendUnitCatalog(sb, map);
+            AppendTerrainTypeCatalog(sb, map);
 
             return sb.ToString();
         }
@@ -172,6 +173,42 @@ namespace TSMapEditor.AI.Operations
                     int take = Math.Min(maxPerLine, kvp.Value.Count - i);
                     sb.AppendLine("    " + string.Join(", ", kvp.Value.Skip(i).Take(take)));
                 }
+            }
+
+            sb.AppendLine();
+        }
+
+        /// <summary>
+        /// Appends available terrain object types (trees, rocks, etc.) for place_terrain_object.
+        /// </summary>
+        private static void AppendTerrainTypeCatalog(StringBuilder sb, Map map)
+        {
+            var terrainTypes = map.Rules.TerrainTypes;
+            if (terrainTypes == null || terrainTypes.Count == 0)
+                return;
+
+            sb.AppendLine("=== 可用的地形对象 (TerrainObject) ===");
+            sb.AppendLine("用于 place_terrain_object 操作的 objectName 字段：");
+
+            var entries = new List<string>();
+            foreach (var t in terrainTypes)
+            {
+                if (!t.EditorVisible)
+                    continue;
+
+                string displayName = t.GetEditorDisplayName();
+                if (displayName != t.ININame && !string.IsNullOrWhiteSpace(displayName))
+                    entries.Add($"{t.ININame}: {displayName}");
+                else
+                    entries.Add(t.ININame);
+            }
+
+            // Compact output
+            const int maxPerLine = 8;
+            for (int i = 0; i < entries.Count; i += maxPerLine)
+            {
+                int take = Math.Min(maxPerLine, entries.Count - i);
+                sb.AppendLine("  " + string.Join(", ", entries.Skip(i).Take(take)));
             }
 
             sb.AppendLine();
