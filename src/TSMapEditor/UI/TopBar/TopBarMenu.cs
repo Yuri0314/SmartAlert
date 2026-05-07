@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using Rampastring.XNAUI;
@@ -33,6 +33,7 @@ namespace TSMapEditor.UI.TopBar
         public event EventHandler<FileSelectedEventArgs> OnFileSelected;
         public event EventHandler InputFileReloadRequested;
         public event EventHandler MapWideOverlayLoadRequested;
+        public event EventHandler AIAssistantToggleRequested;
 
         private readonly MutationManager mutationManager;
         private readonly MapUI mapUI;
@@ -193,6 +194,8 @@ namespace TSMapEditor.UI.TopBar
             viewContextMenu.AddItem(Translate(this, "View.ToggleLightDisabledBuildings", "Toggle Light From Disabled Buildings"), () => mapUI.EditorState.LightDisabledLightSources = !mapUI.EditorState.LightDisabledLightSources);
             viewContextMenu.AddItem(" ", null, () => false, null, null);
             viewContextMenu.AddItem(Translate(this, "View.ToggleFullscreenMode", "Toggle Fullscreen Mode"), () => KeyboardCommands.Instance.ToggleFullscreen.DoTrigger());
+            viewContextMenu.AddItem(" ", null, () => false, null, null);
+            viewContextMenu.AddItem("AI 助手 (Ctrl+Shift+A)", () => AIAssistantToggleRequested?.Invoke(this, EventArgs.Empty));
 
             var viewButton = new MenuButton(WindowManager, viewContextMenu);
             viewButton.Name = nameof(viewButton);

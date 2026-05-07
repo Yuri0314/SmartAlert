@@ -165,6 +165,7 @@ namespace TSMapEditor.UI
             topBarMenu.Width = editorSidebar.Width;
             topBarMenu.OnFileSelected += OpenMapWindow_OnFileSelected;
             topBarMenu.MapWideOverlayLoadRequested += TopBarMenu_MapWideOverlayLoadRequested;
+            topBarMenu.AIAssistantToggleRequested += (s, e) => ToggleAIChatPanel();
             AddChild(topBarMenu);
 
             var editorControlsPanel = new EditorControlsPanel(WindowManager, map, theaterGraphics,
@@ -223,10 +224,6 @@ namespace TSMapEditor.UI
 
             aiChatPanel = new AIChatPanel(WindowManager, aiChatService);
             aiChatPanel.Name = nameof(aiChatPanel);
-            aiChatPanel.Width = 350;
-            aiChatPanel.Height = WindowManager.RenderResolutionY - Constants.UITopBarMenuHeight;
-            aiChatPanel.X = WindowManager.RenderResolutionX - aiChatPanel.Width;
-            aiChatPanel.Y = Constants.UITopBarMenuHeight;
             aiChatPanel.DrawOrder = 1000;
             aiChatPanel.UpdateOrder = 1000;
             aiChatPanel.SettingsRequested += (s, e) => ShowAISettings();
@@ -238,20 +235,6 @@ namespace TSMapEditor.UI
             aiSettingsWindow.UpdateOrder = 2000;
             AddChild(aiSettingsWindow);
             aiSettingsWindow.Disable();
-
-            // AI toggle button - placed at the right end of the top bar, before the tile info display
-            var btnToggleAI = new EditorButton(WindowManager);
-            btnToggleAI.Name = "btnToggleAI";
-            btnToggleAI.Text = "AI 助手";
-            btnToggleAI.Width = 70;
-            btnToggleAI.Height = Constants.UITopBarMenuHeight;
-            // Position it to the left of the tile info display area
-            btnToggleAI.X = WindowManager.RenderResolutionX - tileInfoDisplay.Width - btnToggleAI.Width - 4;
-            btnToggleAI.Y = 0;
-            btnToggleAI.DrawOrder = 900;
-            btnToggleAI.UpdateOrder = 900;
-            btnToggleAI.LeftClick += (s, e) => ToggleAIChatPanel();
-            AddChild(btnToggleAI);
 
             Keyboard.OnKeyPressed += AIChatKeyHandler;
         }
