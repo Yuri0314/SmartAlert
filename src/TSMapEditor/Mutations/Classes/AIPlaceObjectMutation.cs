@@ -168,15 +168,16 @@ namespace TSMapEditor.Mutations.Classes
 
         /// <summary>
         /// Searches for a valid placement position for a building, spiraling outward from the target.
+        /// Checks both occupancy (CanPlaceObjectAt) AND terrain height uniformity across foundation.
         /// </summary>
         private Point2D? FindValidPlacementPosition(Map map, Structure structure, Point2D target)
         {
             // Try the target position first
-            if (map.CanPlaceObjectAt(structure, target, false, false))
+            if (IsValidBuildingPosition(map, structure, target))
                 return target;
 
-            // Spiral outward up to 8 cells away
-            for (int radius = 1; radius <= 8; radius++)
+            // Spiral outward up to 10 cells away
+            for (int radius = 1; radius <= 10; radius++)
             {
                 for (int dy = -radius; dy <= radius; dy++)
                 {
@@ -186,17 +187,53 @@ namespace TSMapEditor.Mutations.Classes
                             continue; // Only check the perimeter
 
                         var candidate = new Point2D(target.X + dx, target.Y + dy);
-                        structure.Position = candidate;
-                        if (map.GetTile(candidate) != null &&
-                            map.CanPlaceObjectAt(structure, candidate, false, false))
-                        {
+                        if (IsValidBuildingPosition(map, structure, candidate))
                             return candidate;
-                        }
                     }
                 }
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Checks if a building can be placed at the given position:
+        /// 1. All foundation cells must exist on the map
+        /// 2. All foundation cells must be at the same height level (no cliff spanning)
+        /// 3. No overlap with existing buildings (CanPlaceObjectAt)
+        /// </summary>
+        private bool IsValidBuildingPosition(Map map, Structure structure, Point2D pos)
+        {
+            var cell = map.GetTile(pos);
+            if (cell == null)
+                return false;
+
+            structure.Position = pos;
+
+            // Check WAE's built-in occupancy validation
+            if (!map.CanPlaceObjectAt(structure, pos, false, false))
+                return false;
+
+            // Check height uniformity across all foundation cells
+            byte baseHeight = cell.Level;
+            bool heightUniform = true;
+
+            structure.ObjectType.ArtConfig.DoForFoundationCoordsOrOrigin(offset =>
+            {
+                var foundationCell = map.GetTile(pos + offset);
+                if (foundationCell == null)
+                {
+                    heightUniform = false;
+                    return;
+                }
+
+                if (foundationCell.Level != baseHeight)
+                {
+                    heightUniform = false;
+                }
+            });
+
+            return heightUniform;
         }
 
         /// <summary>
