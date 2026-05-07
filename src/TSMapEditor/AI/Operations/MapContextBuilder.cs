@@ -51,6 +51,25 @@ namespace TSMapEditor.AI.Operations
             sb.AppendLine();
             sb.AppendLine("注意: TileSetName 必须完全匹配上面列出的名称（区分大小写）。");
 
+            // List available houses (owners)
+            sb.AppendLine();
+            sb.AppendLine("=== 地图中的所属方 (Houses) ===");
+            var houses = map.GetHouses();
+            if (houses.Count > 0)
+            {
+                foreach (var house in houses)
+                {
+                    sb.AppendLine($"  - \"{house.ININame}\"");
+                }
+            }
+            else
+            {
+                sb.AppendLine("  （无已定义的所属方）");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("注意: 放置单位/建筑时 owner 使用上面的所属方名称。不指定时默认 Neutral。");
+
             return sb.ToString();
         }
     }

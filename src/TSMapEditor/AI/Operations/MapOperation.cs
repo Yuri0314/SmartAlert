@@ -6,7 +6,7 @@ namespace TSMapEditor.AI.Operations
     public class MapOperation
     {
         /// <summary>
-        /// Operation type: "fill_terrain", "set_height", "clear_area"
+        /// Operation type: "fill_terrain", "place_building", "place_unit", "place_infantry", "place_overlay"
         /// </summary>
         public string Type { get; set; } = string.Empty;
 
@@ -45,5 +45,23 @@ namespace TSMapEditor.AI.Operations
         /// Human-readable description of what this operation does.
         /// </summary>
         public string Description { get; set; } = string.Empty;
+
+        /// <summary>
+        /// ININame or display name of the object to place (e.g. "APOC", "E1", "GAPILE").
+        /// Used by place_building, place_unit, place_infantry operations.
+        /// </summary>
+        public string ObjectName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Owner house name (e.g. "Americans", "Neutral", "Russians").
+        /// Used by place_building, place_unit, place_infantry operations.
+        /// </summary>
+        public string Owner { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Number of objects to place (default 1).
+        /// Used by place_unit, place_infantry operations.
+        /// </summary>
+        public int Count { get; set; } = 1;
     }
 }

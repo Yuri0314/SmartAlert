@@ -27,37 +27,72 @@ namespace TSMapEditor.AI.Operations
 1. ""message"": 给用户的简短说明（中文）
 2. ""operations"": 操作指令数组
 
-每个操作指令的格式：
+支持的操作类型和格式：
+
+1. fill_terrain — 用指定地形填充矩形区域：
 {{
   ""type"": ""fill_terrain"",
-  ""x"": 起始X坐标,
-  ""y"": 起始Y坐标,
-  ""width"": 区域宽度,
-  ""height"": 区域高度,
+  ""x"": 起始X坐标, ""y"": 起始Y坐标,
+  ""width"": 宽度, ""height"": 高度,
   ""tileSetName"": ""地形类型名称""
 }}
 
-支持的操作类型：
-- ""fill_terrain"": 用指定地形填充矩形区域
+2. place_building — 放置建筑：
+{{
+  ""type"": ""place_building"",
+  ""x"": X坐标, ""y"": Y坐标,
+  ""objectName"": ""建筑INI名称（如 GAPILE, NACNST, YAREFN）"",
+  ""owner"": ""所属方名称""
+}}
+
+3. place_unit — 放置载具：
+{{
+  ""type"": ""place_unit"",
+  ""x"": X坐标, ""y"": Y坐标,
+  ""width"": 分布区域宽度, ""height"": 分布区域高度,
+  ""objectName"": ""载具INI名称（如 APOC, MTNK, HTNK）"",
+  ""owner"": ""所属方名称"",
+  ""count"": 数量
+}}
+
+4. place_infantry — 放置步兵：
+{{
+  ""type"": ""place_infantry"",
+  ""x"": X坐标, ""y"": Y坐标,
+  ""width"": 分布区域宽度, ""height"": 分布区域高度,
+  ""objectName"": ""步兵INI名称（如 E1, E2, BORIS）"",
+  ""owner"": ""所属方名称"",
+  ""count"": 数量
+}}
+
+5. place_overlay — 在区域内放置覆盖物（如矿石）：
+{{
+  ""type"": ""place_overlay"",
+  ""x"": 起始X坐标, ""y"": 起始Y坐标,
+  ""width"": 宽度, ""height"": 高度,
+  ""objectName"": ""overlay名称（矿石用 INTIB01 或 ore）""
+}}
 
 规则：
 - 坐标不能超出地图范围
 - tileSetName 必须是上面列出的可用地形类型的精确名称
+- objectName 使用游戏内部的 INI 名称。如果你不确定准确的名称，用英文缩写或你认为最可能的名称，系统会模糊匹配
+- owner 使用地图中已定义的所属方名称。如果不指定，默认使用 Neutral
 - 如果用户的请求不清楚或不可行，在 message 中解释原因，operations 为空数组
 - 如果用户只是聊天而不是编辑请求，正常回复在 message 中，operations 为空数组
 
 回复示例：
 ```json
 {{
-  ""message"": ""已将地图左上角 10x10 区域填充为水面。"",
+  ""message"": ""已在地图中放置了3辆天启坦克。"",
   ""operations"": [
     {{
-      ""type"": ""fill_terrain"",
-      ""x"": 0,
-      ""y"": 0,
-      ""width"": 10,
-      ""height"": 10,
-      ""tileSetName"": ""Water""
+      ""type"": ""place_unit"",
+      ""x"": 50, ""y"": 50,
+      ""width"": 5, ""height"": 5,
+      ""objectName"": ""APOC"",
+      ""owner"": ""Americans"",
+      ""count"": 3
     }}
   ]
 }}
@@ -117,6 +152,15 @@ namespace TSMapEditor.AI.Operations
 
                         if (opElement.TryGetProperty("description", out var descProp))
                             op.Description = descProp.GetString() ?? string.Empty;
+
+                        if (opElement.TryGetProperty("objectName", out var objProp))
+                            op.ObjectName = objProp.GetString() ?? string.Empty;
+
+                        if (opElement.TryGetProperty("owner", out var ownerProp))
+                            op.Owner = ownerProp.GetString() ?? string.Empty;
+
+                        if (opElement.TryGetProperty("count", out var countProp))
+                            op.Count = countProp.GetInt32();
 
                         operations.Add(op);
                     }

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Rampastring.Tools;
 using TSMapEditor.AI.Operations;
+using TSMapEditor.GameMath;
 using TSMapEditor.Models;
 using TSMapEditor.Mutations;
 using TSMapEditor.Mutations.Classes;
@@ -65,6 +67,14 @@ namespace TSMapEditor.AI
             {
                 case "fill_terrain":
                     return ExecuteFillTerrain(op);
+                case "place_building":
+                    return ExecutePlaceObject(op, AIPlaceObjectType.Building);
+                case "place_unit":
+                    return ExecutePlaceObject(op, AIPlaceObjectType.Vehicle);
+                case "place_infantry":
+                    return ExecutePlaceObject(op, AIPlaceObjectType.Infantry);
+                case "place_overlay":
+                    return ExecutePlaceOverlay(op);
                 default:
                     return $"不支持的操作类型: {op.Type}";
             }
@@ -106,6 +116,218 @@ namespace TSMapEditor.AI
             return $"✓ 已填充 {op.TileSetName} 在 ({startX},{startY}) 区域 {actualWidth}x{actualHeight}";
         }
 
+        private string ExecutePlaceObject(MapOperation op, AIPlaceObjectType objectType)
+        {
+            if (string.IsNullOrWhiteSpace(op.ObjectName))
+                return "缺少对象名称 (objectName)";
+
+            // Resolve the ININame
+            string resolvedININame = ResolveObjectININame(op.ObjectName, objectType);
+            if (resolvedININame == null)
+                return $"找不到{GetObjectTypeName(objectType)}: \"{op.ObjectName}\"";
+
+            // Resolve owner house
+            House owner = ResolveOwner(op.Owner);
+            if (owner == null)
+                return $"找不到所属方: \"{op.Owner}\"。可用: {string.Join(", ", map.GetHouses().Select(h => h.ININame))}";
+
+            int count = Math.Max(1, Math.Min(op.Count, 50)); // Cap at 50
+
+            // Calculate placement positions
+            var positions = CalculatePlacementPositions(op.X, op.Y, op.Width, op.Height, count);
+            if (positions.Count == 0)
+                return $"无法在 ({op.X},{op.Y}) 区域内找到可放置的位置";
+
+            var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
+                resolvedININame, owner, positions,
+                op.Description ?? $"放置 {count}x {resolvedININame} 归属 {owner.ININame}");
+
+            mutationManager.PerformMutation(mutation);
+
+            return $"✓ 已放置 {positions.Count}x {resolvedININame} 归属 {owner.ININame}";
+        }
+
+        private string ExecutePlaceOverlay(MapOperation op)
+        {
+            if (string.IsNullOrWhiteSpace(op.ObjectName))
+                return "缺少 overlay 名称 (objectName)";
+
+            // Find overlay type
+            var overlayType = FindOverlayType(op.ObjectName);
+            if (overlayType == null)
+                return $"找不到 overlay 类型: \"{op.ObjectName}\"";
+
+            // Validate area
+            int width = Math.Max(1, op.Width);
+            int height = Math.Max(1, op.Height);
+            int startX = Math.Max(0, Math.Min(op.X, map.Size.X - 1));
+            int startY = Math.Max(0, Math.Min(op.Y, map.Size.Y - 1));
+
+            var mutation = new AIPlaceOverlayMutation(mutationTarget, overlayType,
+                startX, startY, width, height,
+                op.Description ?? $"放置 {overlayType.ININame} 在 ({startX},{startY}) {width}x{height}");
+
+            mutationManager.PerformMutation(mutation);
+
+            return $"✓ 已放置 {overlayType.ININame} 在 ({startX},{startY}) 区域 {width}x{height}";
+        }
+
+        // --- Name resolution helpers ---
+
+        /// <summary>
+        /// Resolves an object name (ININame or display name) to its actual ININame.
+        /// Tries exact match first, then case-insensitive, then partial display name match.
+        /// </summary>
+        private string ResolveObjectININame(string name, AIPlaceObjectType objectType)
+        {
+            switch (objectType)
+            {
+                case AIPlaceObjectType.Building:
+                    return FindInList(map.Rules.BuildingTypes, name);
+                case AIPlaceObjectType.Vehicle:
+                    return FindInList(map.Rules.UnitTypes, name);
+                case AIPlaceObjectType.Infantry:
+                    return FindInList(map.Rules.InfantryTypes, name);
+                default:
+                    return null;
+            }
+        }
+
+        private string FindInList<T>(List<T> types, string name) where T : TechnoType
+        {
+            // 1. Exact ININame match
+            var exact = types.Find(t => t.ININame == name);
+            if (exact != null)
+                return exact.ININame;
+
+            // 2. Case-insensitive ININame match
+            var caseInsensitive = types.Find(t =>
+                t.ININame.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (caseInsensitive != null)
+                return caseInsensitive.ININame;
+
+            // 3. Partial match on ININame (contains)
+            var partialINI = types.Find(t =>
+                t.ININame.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (partialINI != null)
+                return partialINI.ININame;
+
+            // 4. Display name match (Name property from INI)
+            var displayMatch = types.Find(t =>
+                t.GetEditorDisplayName().IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (displayMatch != null)
+                return displayMatch.ININame;
+
+            return null;
+        }
+
+        private OverlayType FindOverlayType(string name)
+        {
+            // Exact match
+            var exact = map.Rules.OverlayTypes.Find(o => o.ININame == name);
+            if (exact != null) return exact;
+
+            // Case-insensitive
+            var ci = map.Rules.OverlayTypes.Find(o =>
+                o.ININame.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (ci != null) return ci;
+
+            // Partial match
+            var partial = map.Rules.OverlayTypes.Find(o =>
+                o.ININame.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (partial != null) return partial;
+
+            // Check if user asked for "tiberium" or "ore" generically
+            if (name.IndexOf("ore", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("矿", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("tiberium", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // Return first tiberium overlay type
+                return map.Rules.OverlayTypes.Find(o => o.Tiberium);
+            }
+
+            return null;
+        }
+
+        private House ResolveOwner(string ownerName)
+        {
+            var houses = map.GetHouses();
+
+            if (string.IsNullOrWhiteSpace(ownerName))
+            {
+                // Default to first house or Neutral
+                return houses.Find(h => h.ININame == "Neutral") ?? (houses.Count > 0 ? houses[0] : null);
+            }
+
+            // Exact match
+            var exact = houses.Find(h => h.ININame == ownerName);
+            if (exact != null) return exact;
+
+            // Case-insensitive
+            var ci = houses.Find(h => h.ININame.Equals(ownerName, StringComparison.OrdinalIgnoreCase));
+            if (ci != null) return ci;
+
+            // Partial match
+            var partial = houses.Find(h =>
+                h.ININame.IndexOf(ownerName, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (partial != null) return partial;
+
+            // Fallback: first house
+            return houses.Count > 0 ? houses[0] : null;
+        }
+
+        /// <summary>
+        /// Calculates a list of placement positions within an area.
+        /// </summary>
+        private List<Point2D> CalculatePlacementPositions(int x, int y, int width, int height, int count)
+        {
+            var positions = new List<Point2D>();
+
+            if (count == 1)
+            {
+                // Single object: place at the specified position
+                int px = Math.Max(0, Math.Min(x, map.Size.X - 1));
+                int py = Math.Max(0, Math.Min(y, map.Size.Y - 1));
+                positions.Add(new Point2D(px, py));
+            }
+            else
+            {
+                // Multiple objects: distribute within the area
+                int areaW = Math.Max(1, width);
+                int areaH = Math.Max(1, height);
+                int totalCells = areaW * areaH;
+
+                // If area is large enough, distribute evenly; otherwise fill sequentially
+                int step = Math.Max(1, totalCells / count);
+                int placed = 0;
+
+                for (int i = 0; i < totalCells && placed < count; i += step)
+                {
+                    int cx = x + (i % areaW);
+                    int cy = y + (i / areaW);
+
+                    if (cx >= 0 && cx < map.Size.X && cy >= 0 && cy < map.Size.Y)
+                    {
+                        positions.Add(new Point2D(cx, cy));
+                        placed++;
+                    }
+                }
+            }
+
+            return positions;
+        }
+
+        private static string GetObjectTypeName(AIPlaceObjectType type)
+        {
+            switch (type)
+            {
+                case AIPlaceObjectType.Building: return "建筑";
+                case AIPlaceObjectType.Vehicle: return "载具";
+                case AIPlaceObjectType.Infantry: return "步兵";
+                default: return "对象";
+            }
+        }
+
         /// <summary>
         /// Finds the start tile index for a tileset by name (case-insensitive).
         /// </summary>
@@ -138,3 +360,4 @@ namespace TSMapEditor.AI
         }
     }
 }
+
