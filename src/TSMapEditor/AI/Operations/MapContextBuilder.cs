@@ -73,6 +73,15 @@ namespace TSMapEditor.AI.Operations
             var tileSets = theaterGraphics.Theater.TileSets;
             var usableTileSets = new List<string>();
 
+            // Debug: log all tileset names
+            var allNames = new List<string>();
+            for (int i = 0; i < tileSets.Count; i++)
+            {
+                if (tileSets[i].TilesInSet > 0 && !string.IsNullOrWhiteSpace(tileSets[i].SetName))
+                    allNames.Add($"{i}:{tileSets[i].SetName}");
+            }
+            Rampastring.Tools.Logger.Log($"DEBUG TileSets: {string.Join(", ", allNames)}");
+
             for (int i = 0; i < tileSets.Count; i++)
             {
                 var tileSet = tileSets[i];
@@ -94,10 +103,16 @@ namespace TSMapEditor.AI.Operations
                             role = "坡道过渡";
                         else if (name.IndexOf("Water", StringComparison.OrdinalIgnoreCase) >= 0)
                             role = "水域";
-                        else if (name.Equals("Clear", StringComparison.OrdinalIgnoreCase))
-                            role = "★ 标准平地/草地 — 创建地图时必须首先用此铺满全图";
+                        else if (name.Equals("LAT Grass", StringComparison.OrdinalIgnoreCase))
+                            role = "★ 标准草地 — 创建地图时必须首先用此铺满全图";
+                        else if (name.Equals("LAT Dark Grass", StringComparison.OrdinalIgnoreCase))
+                            role = "深色草地 — 用于局部区域增加地表变化";
+                        else if (name.Equals("LAT Rough Grass", StringComparison.OrdinalIgnoreCase))
+                            role = "粗糙草地 — 用于荒野和高地周围";
                         else if (name.Contains("Road"))
                             role = "道路";
+                        else if (name.Contains("Farm"))
+                            role = "农田 — 用于乡村风格";
                         else
                             role = "装饰地形";
 

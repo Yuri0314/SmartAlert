@@ -116,14 +116,15 @@ namespace TSMapEditor.AI.Operations
 === 地形选择指南 ===
 
 重要：fill_terrain 的 tileSetName 选择规则：
-- ""Clear"" = 标准平地/草地，是最常用的基础地形，创建地图时应该首先用它铺满整个地图
-- ""LAT Grass"" / ""LAT Dark Grass"" / ""LAT Rough Grass"" = 变化草地，用于局部装饰
+- ""LAT Grass"" = ★ 标准草地，创建地图时首先用它铺满全图作为基础！
+- ""LAT Dark Grass"" = 深色草地，用于地图局部区域增加变化
+- ""LAT Rough Grass"" = 粗糙草地，用于荒野区域
 - ""Sand"" / ""Dirt"" = 沙地/泥地，用于沙漠或泥路区域
-- 包含 ""Cliffs"" 的地形 = 悬崖岩壁，只用于地图边缘或山脉，绝不能用作基础地形
+- 包含 ""Cliffs"" 的地形 = 悬崖岩壁，只用于地图边缘或山脉
 - 包含 ""Ramps"" 的地形 = 坡道过渡，只用于不同高度之间的连接
 - 包含 ""Water"" 的地形 = 水域，用于河流/湖泊
-- 包含 ""Road"" 的地形 = 道路，用于基地间的路径
-创建地图时：第一步必须用 ""Clear"" 填满全图作为底层！
+- ""Farm Crops"" = 农田，用于乡村风格区域
+创建地图时：第一步必须用 ""LAT Grass"" 填满全图作为底层！
 
 === 复杂任务组合指南 ===
 
@@ -141,21 +142,24 @@ namespace TSMapEditor.AI.Operations
 【2人图模板】地图约 80x70，出生点在左下和右上对角：
 - 矿脉(TIBTRE01): 6-8个（每个出生点附近2个矿区，中间2个扩张矿区）
 - 中立石油井(CAOILD): 2个，在地图中线对称位置
-- 中立装饰小屋(CABHUT): 4-6个，点缀路径旁
+- 装饰建筑: 商店(CASTOR/CASTOR02)x4、风车(CAWIND)x2、围栏木屋(CAWOODS)x4，点缀道路两侧
+- 地形变化: 用 LAT Dark Grass 铺 3-4 块 15x15 区域增加地表变化
 - 树林: 4簇（地图四边各一簇，12x12，density=0.15）
 - 高地: 地图中央1个 12x12 高地(高度1)
 
 【4人图模板(2v2)】地图约 100x100，出生点在四角：
 - 矿脉(TIBTRE01): 12-16个（每个出生点附近2个矿区各2-3个矿脉，中间4个扩张矿区各1-2个矿脉）
 - 中立石油井(CAOILD): 4个，在地图四条边的中点位置
-- 中立装饰小屋(CABHUT): 8个，分散在地图各处
+- 装饰建筑: 商店(CASTOR)x4、公园长椅(CAPARK01)x4、风车(CAWIND)x4、围栏木屋(CAWOODS)x4，分散在地图各处
+- 地形变化: 用 LAT Dark Grass 铺 4-6 块 15x20 区域，用 LAT Rough Grass 在高地周围铺，增加地表丰富度
 - 树林: 4-6簇（地图边缘和通道分割处，每簇 12x12，density=0.12）
 - 高地: 地图中央1个 15x15 高地(高度2)
 
 【6人图模板】地图约 120x170，出生点均匀分布：
 - 矿脉(TIBTRE01): 20-30个
 - 中立石油井(CAOILD): 6个
-- 中立装饰小屋(CABHUT): 12个
+- 装饰建筑: 混合使用 CASTOR、CAPARK01-06、CAWIND、CAWOODS 等共 15-20个
+- 地形变化: 多种 LAT 地形混合
 - 树林: 6-8簇
 - 高地: 2-3个分散的高地
 
@@ -164,7 +168,7 @@ namespace TSMapEditor.AI.Operations
 即使用户只说""创建2v2对战地图""，你也必须执行以下全部步骤：
 
 第一步 - 铺地形底图：
-  fill_terrain, tileSetName=""Clear"", 覆盖整个地图
+  fill_terrain, tileSetName=""LAT Grass"", 覆盖整个地图（标准草地）
 
 第二步 - 创建地形起伏：
   set_height 在地图中央创建高地（高度1-2，区域至少10x10）
@@ -181,12 +185,22 @@ namespace TSMapEditor.AI.Operations
   a. place_overlay 铺 6x6 的 TIB01 或 GEM01
   b. place_terrain_object 在每个矿区中心放 TIBTRE01 矿脉
 
-第六步 - 放置中立建筑：
-  place_building, owner=""Neutral""
+第六步 - 放置中立建筑（owner=""Neutral""）：
   - 石油井(CAOILD): 对称放在地图中间区域，2-4个
-  - 装饰小屋(CABHUT): 分散在地图各处，4-8个
+  - 装饰建筑（增加地图细节感，每种 2-4 个，分散放置）：
+    商店: CASTOR / CASTOR02
+    公园: CAPARK01 / CAPARK04
+    木屋: CAWOODS
+    风车: CAWIND
+    水塔: CABUBB
+    路灯: CASOLR
 
-第七步 - 散布树林：
+第七步 - 铺地形变化（非常重要！让地图不单调）：
+  fill_terrain 用 LAT Dark Grass 在地图各区域铺 4-6 块 15x20 的不规则区域
+  fill_terrain 用 LAT Rough Grass 在高地周围铺粗糙草地
+  这样地面就不会全是同一种颜色
+
+第八步 - 散布树林：
   place_terrain_object 放 4-6 簇小树林
   每簇 12x12，density=0.12
   放在地图边缘和战场分隔区域
