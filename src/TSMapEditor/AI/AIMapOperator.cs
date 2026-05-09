@@ -41,6 +41,14 @@ namespace TSMapEditor.AI
         }
 
         /// <summary>
+        /// Counts how many spawn point waypoints (indices 0-7) currently exist on the map.
+        /// </summary>
+        public int CountSpawnWaypoints()
+        {
+            return map.Waypoints.Count(wp => wp.Identifier >= 0 && wp.Identifier <= 7);
+        }
+
+        /// <summary>
         /// Executes a list of map operations, returning a summary of what was done.
         /// </summary>
         public string ExecuteOperations(List<MapOperation> operations)
@@ -55,6 +63,7 @@ namespace TSMapEditor.AI
                 try
                 {
                     string result = ExecuteOperation(op);
+                    Logger.Log($"AI Op: {op.Type} at ({op.X},{op.Y}) => {result}");
                     if (!string.IsNullOrEmpty(result))
                         results.Add(result);
                 }

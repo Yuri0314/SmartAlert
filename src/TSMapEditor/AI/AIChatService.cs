@@ -169,26 +169,28 @@ namespace TSMapEditor.AI
                 {
                     operationResult = mapOperator.ExecuteOperations(result.Operations);
 
-                    // Post-execution validation: check if map operations included
-                    // map creation ops but no waypoints - auto-add default spawn points
+                    // Post-execution validation: check if the map has enough spawn waypoints
+                    // This catches both AI forgetting waypoints AND waypoints placed at invalid coordinates
                     bool hasTerrainOps = result.Operations.Any(o => o.Type == "fill_terrain");
-                    bool hasWaypointOps = result.Operations.Any(o => o.Type == "set_waypoint");
+                    int actualSpawnPoints = mapOperator.CountSpawnWaypoints();
 
-                    if (hasTerrainOps && !hasWaypointOps)
+                    if (hasTerrainOps && actualSpawnPoints < 2)
                     {
-                        // AI generated terrain but forgot waypoints - auto-add 4 spawn points
+                        // Map was created but doesn't have enough spawn points - auto-add at safe isometric positions
                         var mapSize = mapOperator.GetMapSize();
-                        int margin = Math.Max(15, mapSize.X / 6);
+                        int w = mapSize.X; // e.g. 100 for 100x100 map
+                        // Safe positions: (W±0.4W, W±0.4W) guarantees |0.4W|+|0.4W| = 0.8W < W-1
+                        int offset = (int)(w * 0.4);
                         var defaultWaypoints = new List<MapOperation>
                         {
-                            new MapOperation { Type = "set_waypoint", X = margin, Y = margin, WaypointIndex = 0, Description = "自动补全: 玩家1出生点(左上)" },
-                            new MapOperation { Type = "set_waypoint", X = mapSize.X - margin, Y = margin, WaypointIndex = 1, Description = "自动补全: 玩家2出生点(右上)" },
-                            new MapOperation { Type = "set_waypoint", X = margin, Y = mapSize.Y - margin, WaypointIndex = 2, Description = "自动补全: 玩家3出生点(左下)" },
-                            new MapOperation { Type = "set_waypoint", X = mapSize.X - margin, Y = mapSize.Y - margin, WaypointIndex = 3, Description = "自动补全: 玩家4出生点(右下)" },
+                            new MapOperation { Type = "set_waypoint", X = w - offset, Y = w - offset, WaypointIndex = 0, Description = "自动补全: 玩家1出生点(左上)" },
+                            new MapOperation { Type = "set_waypoint", X = w + offset, Y = w - offset, WaypointIndex = 1, Description = "自动补全: 玩家2出生点(右上)" },
+                            new MapOperation { Type = "set_waypoint", X = w - offset, Y = w + offset, WaypointIndex = 2, Description = "自动补全: 玩家3出生点(左下)" },
+                            new MapOperation { Type = "set_waypoint", X = w + offset, Y = w + offset, WaypointIndex = 3, Description = "自动补全: 玩家4出生点(右下)" },
                         };
                         string wpResult = mapOperator.ExecuteOperations(defaultWaypoints);
-                        operationResult += "\n\n⚠️ AI 未生成出生点，已自动在四角补全4个出生点:\n" + wpResult;
-                        Logger.Log("Auto-fix: Added 4 default waypoints because AI forgot them");
+                        operationResult += $"\n\n⚠️ 地图只有 {actualSpawnPoints} 个出生点（需要至少 2 个），已自动在四角补全:\n" + wpResult;
+                        Logger.Log($"Auto-fix: Added 4 default waypoints. Map had only {actualSpawnPoints} spawn points.");
                     }
                 }
                 catch (Exception ex)
@@ -265,7 +267,7 @@ namespace TSMapEditor.AI
                     // Parse response (safe to do on background thread)
                     var (message, operations) = IntentParser.Parse(aiResponse);
                     Logger.Log($"AI Parsed: {operations.Count} ops: {string.Join(", ", operations.Select(o => o.Type))}");
-                    Logger.Log($"AI Raw (first 500): {aiResponse.Substring(0, Math.Min(500, aiResponse.Length))}");
+                    Logger.Log($"AI Raw (first 3000): {aiResponse.Substring(0, Math.Min(3000, aiResponse.Length))}");
 
                     // Queue the result for main thread execution
                     lock (pendingLock)
