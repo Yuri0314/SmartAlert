@@ -1603,36 +1603,6 @@ namespace TSMapEditor.Models
                 throw new ArgumentNullException(nameof(gameConfigINIFiles));
 
             Rules = new Rules();
-
-            // Debug: dump the raw rulesmd.ini to disk for inspection
-            try
-            {
-                var dumpPath = Path.Combine(Environment.CurrentDirectory, "debug_rulesmd_dump.ini");
-                gameConfigINIFiles.RulesIni.WriteIniFile(dumpPath);
-                Logger.Log($"[Rules Debug] Dumped RulesIni to: {dumpPath}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"[Rules Debug] Failed to dump RulesIni: {ex.Message}");
-            }
-
-            // Debug: check for key sections
-            var btSec = gameConfigINIFiles.RulesIni.GetSection("BuildingTypes");
-            var vtSec = gameConfigINIFiles.RulesIni.GetSection("VehicleTypes");
-            var itSec = gameConfigINIFiles.RulesIni.GetSection("InfantryTypes");
-            Logger.Log($"[Rules Debug] RulesIni [BuildingTypes]={btSec?.Keys.Count ?? 0}, [VehicleTypes]={vtSec?.Keys.Count ?? 0}, [InfantryTypes]={itSec?.Keys.Count ?? 0}");
-            // Check for #include or $Include sections
-            bool hasInclude = gameConfigINIFiles.RulesIni.SectionExists("#include");
-            bool hasDollarInclude = gameConfigINIFiles.RulesIni.SectionExists("$Include");
-            Logger.Log($"[Rules Debug] #include section exists: {hasInclude}, $Include section exists: {hasDollarInclude}");
-            // Check for MO-specific sections
-            bool hasFoehn = gameConfigINIFiles.RulesIni.SectionExists("FOEHNCY");
-            bool hasEpsilon = gameConfigINIFiles.RulesIni.SectionExists("EPSCY");
-            Logger.Log($"[Rules Debug] MO factions: FOEHNCY={hasFoehn}, EPSCY={hasEpsilon}");
-            // Check for CADWARB section
-            bool hasCadwarbSec = gameConfigINIFiles.RulesIni.SectionExists("CADWARB");
-            Logger.Log($"[Rules Debug] [CADWARB] section exists: {hasCadwarbSec}");
-
             Rules.InitFromINI(gameConfigINIFiles.RulesIni, initializer);
 
             Rules.InitArt(gameConfigINIFiles.ArtIni, initializer);
@@ -1652,25 +1622,6 @@ namespace TSMapEditor.Models
 
             InitStandardHouseTypesAndHouses(editorRulesIni, gameConfigINIFiles.RulesIni, gameConfigINIFiles.FirestormIni);
 
-            // Debug: log loaded type counts
-            Logger.Log($"[Rules Debug] BuildingTypes: {Rules.BuildingTypes.Count}, VehicleTypes: {Rules.UnitTypes.Count}, InfantryTypes: {Rules.InfantryTypes.Count}");
-            // Check for known MO types
-            var cadwarb = Rules.BuildingTypes.Find(b => b.ININame == "CADWARB");
-            var cawoods = Rules.BuildingTypes.Find(b => b.ININame == "CAWOODS");
-            Logger.Log($"[Rules Debug] MO type CADWARB found: {cadwarb != null}, CAWOODS found: {cawoods != null}");
-            // Check RulesIni sections for BuildingTypes
-            var btSection = gameConfigINIFiles.RulesIni.GetSection("BuildingTypes");
-            Logger.Log($"[Rules Debug] RulesIni [BuildingTypes] entries: {btSection?.Keys.Count ?? 0}");
-            // Check if CADWARB is in the BuildingTypes list
-            if (btSection != null)
-            {
-                bool hasCadwarb = false;
-                foreach (var key in btSection.Keys)
-                {
-                    if (key.Value == "CADWARB") { hasCadwarb = true; break; }
-                }
-                Logger.Log($"[Rules Debug] CADWARB in [BuildingTypes] list: {hasCadwarb}");
-            }
 
             if (gameConfigINIFiles.AIIni != null)
                 Rules.InitAI(gameConfigINIFiles.AIIni, EditorConfig.TeamTypeFlags);

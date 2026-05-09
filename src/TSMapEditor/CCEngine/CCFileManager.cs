@@ -245,9 +245,7 @@ namespace TSMapEditor.CCEngine
 
         public byte[] LoadFile(string name)
         {
-            bool isRulesFile = name.IndexOf("rules", StringComparison.OrdinalIgnoreCase) >= 0;
-
-            if (UserSettings.Instance.LogFileLoading || isRulesFile)
+            if (UserSettings.Instance.LogFileLoading)
                 Logger.Log("LoadFile: " + name);
 
             foreach (string searchDirectory in searchDirectories)
@@ -256,7 +254,8 @@ namespace TSMapEditor.CCEngine
                 if (File.Exists(looseFilePath))
                 {
                     var data = File.ReadAllBytes(looseFilePath);
-                    Logger.Log($"    File found from disk: {searchDirectory} (size={data.Length} bytes)");
+                    if (UserSettings.Instance.LogFileLoading)
+                        Logger.Log($"    File found from disk: {searchDirectory} (size={data.Length} bytes)");
                     return data;
                 }
             }
@@ -266,13 +265,10 @@ namespace TSMapEditor.CCEngine
             if (fileLocationInfos.TryGetValue(id, out FileLocationInfo value))
             {
                 var data = value.MixFile.GetSingleFileData(value.Offset, value.Size);
-                if (isRulesFile)
-                    Logger.Log($"    File found from MIX: {Path.GetFileName(value.MixFile.FilePath)} (size={data.Length} bytes, offset={value.Offset})");
+                if (UserSettings.Instance.LogFileLoading)
+                    Logger.Log($"    File found from MIX: {Path.GetFileName(value.MixFile.FilePath)} (size={data.Length} bytes)");
                 return data;
             }
-
-            if (isRulesFile)
-                Logger.Log($"    FAILED to find file: {name} (hash={id})");
 
             return null;
         }
