@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Rampastring.XNAUI;
 using System;
 using TSMapEditor.GameMath;
+using TSMapEditor.Misc;
 using TSMapEditor.Models;
 
 namespace TSMapEditor.UI.CursorActions
@@ -78,7 +79,7 @@ namespace TSMapEditor.UI.CursorActions
             if (StartCellCoords == null)
             {
                 // Before first click: just draw a label at cursor
-                DrawText(cellCoords, cameraTopLeftPoint, 0, -20, "AI 选区: 点击设定起点", Color.Cyan);
+                DrawText(cellCoords, cameraTopLeftPoint, 0, -20, Translator.Translate("AISelection.ClickStart", "AI Selection: Click to set start point"), Color.Cyan);
                 return;
             }
 
@@ -134,12 +135,12 @@ namespace TSMapEditor.UI.CursorActions
                 // Draw label at the top of the selection
                 Point2D centerTop = new Point2D((startX + endX) / 2, startY);
                 DrawText(centerTop, cameraTopLeftPoint, 0, -20,
-                    $"已选区域: ({startX},{startY}) {w}x{h} — 可在聊天框输入指令", Color.Cyan);
+                    $"{Translator.Translate("AISelection.AreaSelected", "Area selected")}: ({startX},{startY}) {w}x{h} — {Translator.Translate("AISelection.TypeCommand", "type a command in chat")}", Color.Cyan);
             }
             else
             {
                 DrawText(cellCoords, cameraTopLeftPoint, 0, -20,
-                    $"AI 选区: ({startX},{startY}) {w}x{h} — 点击确认", Color.Cyan);
+                    $"{Translator.Translate("AISelection.Preview", "AI Selection")}: ({startX},{startY}) {w}x{h} — {Translator.Translate("AISelection.ClickConfirm", "click to confirm")}", Color.Cyan);
             }
         }
     }

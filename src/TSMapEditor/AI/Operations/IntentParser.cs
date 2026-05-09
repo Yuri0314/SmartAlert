@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Rampastring.Tools;
+using TSMapEditor.Misc;
 
 namespace TSMapEditor.AI.Operations
 {
@@ -178,7 +179,7 @@ namespace TSMapEditor.AI.Operations
         public static (string message, List<MapOperation> operations) Parse(string aiResponse)
         {
             if (string.IsNullOrWhiteSpace(aiResponse))
-                return ("AI 返回了空响应。", new List<MapOperation>());
+                return (Translator.Translate("AI.EmptyResponse", "AI returned an empty response."), new List<MapOperation>());
 
             try
             {
@@ -188,7 +189,7 @@ namespace TSMapEditor.AI.Operations
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
-                string message = "操作完成。";
+                string message = Translator.Translate("AI.OperationDone", "Operation completed.");
                 if (root.TryGetProperty("message", out var msgProp))
                     message = msgProp.GetString() ?? message;
 

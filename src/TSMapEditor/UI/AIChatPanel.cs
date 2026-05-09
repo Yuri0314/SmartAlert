@@ -3,6 +3,7 @@ using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
 using System;
 using TSMapEditor.AI;
+using TSMapEditor.Misc;
 using TSMapEditor.UI.Controls;
 
 namespace TSMapEditor.UI
@@ -59,7 +60,7 @@ namespace TSMapEditor.UI
             // Header label
             lblTitle = new XNALabel(WindowManager);
             lblTitle.Name = nameof(lblTitle);
-            lblTitle.Text = "SmartAlert AI 助手";
+            lblTitle.Text = Translator.Translate("AIChatPanel.Title", "SmartAlert AI Assistant");
             lblTitle.FontIndex = Constants.UIBoldFont;
             lblTitle.X = Padding;
             lblTitle.Y = Padding;
@@ -68,7 +69,7 @@ namespace TSMapEditor.UI
             // Settings button (top right)
             btnSettings = new EditorButton(WindowManager);
             btnSettings.Name = nameof(btnSettings);
-            btnSettings.Text = "设置";
+            btnSettings.Text = Translator.Translate("AIChatPanel.Settings", "Settings");
             btnSettings.Width = 40;
             btnSettings.X = Width - btnSettings.Width - Padding;
             btnSettings.Y = Padding - 2;
@@ -78,7 +79,7 @@ namespace TSMapEditor.UI
             // Clear button
             btnClear = new EditorButton(WindowManager);
             btnClear.Name = nameof(btnClear);
-            btnClear.Text = "清空";
+            btnClear.Text = Translator.Translate("AIChatPanel.Clear", "Clear");
             btnClear.Width = 40;
             btnClear.X = btnSettings.X - btnClear.Width - Padding;
             btnClear.Y = Padding - 2;
@@ -86,7 +87,7 @@ namespace TSMapEditor.UI
             {
                 chatService.ClearHistory();
                 lbMessages.Clear();
-                AddSystemMessage("对话已清空。");
+                AddSystemMessage(Translator.Translate("AIChatPanel.ChatCleared", "Chat cleared."));
             };
             AddChild(btnClear);
 
@@ -104,7 +105,7 @@ namespace TSMapEditor.UI
             // Status label
             lblStatus = new XNALabel(WindowManager);
             lblStatus.Name = nameof(lblStatus);
-            lblStatus.Text = chatService.IsConfigured ? "就绪 | Ctrl+Shift+A 切换" : "未配置 - 请点击「设置」";
+            lblStatus.Text = chatService.IsConfigured ? Translator.Translate("AIChatPanel.StatusReady", "Ready | Ctrl+Shift+A to toggle") : Translator.Translate("AIChatPanel.StatusNotConfigured", "Not configured - click Settings");
             lblStatus.X = Padding;
             lblStatus.Y = lbMessages.Bottom + 2;
             lblStatus.ClientRectangle = new Rectangle(Padding, lbMessages.Bottom + 2, Width - Padding * 2, 16);
@@ -122,7 +123,7 @@ namespace TSMapEditor.UI
             // Send button
             btnSend = new EditorButton(WindowManager);
             btnSend.Name = nameof(btnSend);
-            btnSend.Text = "发送";
+            btnSend.Text = Translator.Translate("AIChatPanel.Send", "Send");
             btnSend.Width = 60;
             btnSend.X = tbInput.Right + Padding;
             btnSend.Y = tbInput.Y - 1;
@@ -132,11 +133,11 @@ namespace TSMapEditor.UI
             base.Initialize();
 
             // Welcome message
-            AddSystemMessage("欢迎使用 SmartAlert AI 助手！");
-            AddSystemMessage("输入自然语言指令来编辑地图。");
-            AddSystemMessage("窗口可以拖拽移动。");
+            AddSystemMessage(Translator.Translate("AIChatPanel.Welcome1", "Welcome to SmartAlert AI Assistant!"));
+            AddSystemMessage(Translator.Translate("AIChatPanel.Welcome2", "Type natural language commands to edit the map."));
+            AddSystemMessage(Translator.Translate("AIChatPanel.Welcome3", "This window can be dragged around."));
             if (!chatService.IsConfigured)
-                AddSystemMessage("请先点击「设置」配置 AI 服务。");
+                AddSystemMessage(Translator.Translate("AIChatPanel.PleaseConfig", "Please click Settings to configure the AI service."));
         }
 
         private void SendMessage()
@@ -156,7 +157,7 @@ namespace TSMapEditor.UI
         private void AddUserMessage(string text)
         {
             var item = new XNAListBoxItem();
-            item.Text = "你: " + text;
+            item.Text = Translator.Translate("AIChatPanel.You", "You") + ": " + text;
             item.TextColor = new Color(100, 180, 255);
             lbMessages.AddItem(item);
             ScrollToBottom();
@@ -205,12 +206,12 @@ namespace TSMapEditor.UI
         public void ShowSelectionInfo(int x, int y, int width, int height)
         {
             var item = new XNAListBoxItem();
-            item.Text = $"◆ 已选区域: ({x},{y}) {width}×{height}";
+            item.Text = $"◆ {Translator.Translate("AIChatPanel.SelectedArea", "Selected area")}: ({x},{y}) {width}×{height}";
             item.TextColor = new Color(0, 220, 220); // Cyan
             lbMessages.AddItem(item);
 
             var hintItem = new XNAListBoxItem();
-            hintItem.Text = "  输入指令对选区操作（如\"种满矿石\"）";
+            hintItem.Text = "  " + Translator.Translate("AIChatPanel.SelectionHint", "Type a command to operate on the selection (e.g. \"fill with ore\")");
             hintItem.TextColor = new Color(150, 150, 150);
             lbMessages.AddItem(hintItem);
 
@@ -223,7 +224,7 @@ namespace TSMapEditor.UI
         public void ClearSelectionInfo()
         {
             var item = new XNAListBoxItem();
-            item.Text = "◇ 选区已清除";
+            item.Text = "◇ " + Translator.Translate("AIChatPanel.SelectionCleared", "Selection cleared");
             item.TextColor = new Color(120, 120, 120);
             lbMessages.AddItem(item);
             ScrollToBottom();
@@ -291,7 +292,7 @@ namespace TSMapEditor.UI
                 if (pendingBusyState.HasValue)
                 {
                     bool busy = pendingBusyState.Value;
-                    lblStatus.Text = busy ? "AI 思考中..." : (chatService.IsConfigured ? "就绪" : "未配置");
+                    lblStatus.Text = busy ? Translator.Translate("AIChatPanel.Thinking", "AI thinking...") : (chatService.IsConfigured ? Translator.Translate("AIChatPanel.Ready", "Ready") : Translator.Translate("AIChatPanel.NotConfigured", "Not configured"));
                     btnSend.AllowClick = !busy;
                     pendingBusyState = null;
                 }
