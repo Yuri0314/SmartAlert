@@ -116,15 +116,14 @@ namespace TSMapEditor.AI.Operations
 === 地形选择指南 ===
 
 重要：fill_terrain 的 tileSetName 选择规则：
-- ""LAT Grass"" = ★ 标准草地，创建地图时首先用它铺满全图作为基础！
+- ""Lat Grass"" = ★ 标准草地，创建地图时首先用它铺满全图作为基础！
 - ""LAT Dark Grass"" = 深色草地，用于地图局部区域增加变化
 - ""LAT Rough Grass"" = 粗糙草地，用于荒野区域
-- ""Sand"" / ""Dirt"" = 沙地/泥地，用于沙漠或泥路区域
-- 包含 ""Cliffs"" 的地形 = 悬崖岩壁，只用于地图边缘或山脉
-- 包含 ""Ramps"" 的地形 = 坡道过渡，只用于不同高度之间的连接
-- 包含 ""Water"" 的地形 = 水域，用于河流/湖泊
+- ""LAT Sand"" = 沙地，用于沙漠区域
 - ""Farm Crops"" = 农田，用于乡村风格区域
-创建地图时：第一步必须用 ""LAT Grass"" 填满全图作为底层！
+- 包含 ""Cliffs"" 的地形 = 悬崖岩壁，只用于地图边缘或山脉
+- 包含 ""Water"" 的地形 = 水域，用于河流/湖泊
+创建地图时：第一步必须用 ""Lat Grass"" 填满全图作为底层！
 
 === 复杂任务组合指南 ===
 
@@ -168,24 +167,30 @@ namespace TSMapEditor.AI.Operations
 即使用户只说""创建2v2对战地图""，你也必须执行以下全部步骤：
 
 第一步 - 铺地形底图：
-  fill_terrain, tileSetName=""LAT Grass"", 覆盖整个地图（标准草地）
+  fill_terrain, tileSetName=""Lat Grass"", 覆盖整个地图（标准草地）
 
-第二步 - 创建地形起伏：
+第二步 - 铺地形变化（让地图不单调）：
+  fill_terrain 用 LAT Dark Grass 在地图各区域铺 4-6 块 15x20 的不规则区域
+  fill_terrain 用 LAT Rough Grass 在地图边缘铺几块粗糙草地
+  ★ 这些区域不要覆盖到后面要升高地形的中心区域！
+
+第三步 - 创建地形起伏（必须在所有fill_terrain之后！）：
   set_height 在地图中央创建高地（高度1-2，区域至少10x10）
+  ★ set_height 必须在所有 fill_terrain 操作之后执行，否则坡道贴图会被覆盖导致黑边！
 
-第三步 - 设置出生点：
+第四步 - 设置出生点：
   set_waypoint 设置对称的出生点（四角或对角分布）
 
-第四步 - 铺起始矿区（每个出生点一个）：
+第五步 - 铺起始矿区（每个出生点一个）：
   a. place_overlay 铺 8x8 的 TIB01 矿石（距出生点 10-15 格）
   b. place_terrain_object 在矿区中心放 TIBTRE01 矿脉（1个即可）
   ★ 没有 TIBTRE01 矿脉，矿石采完就没了！
 
-第五步 - 铺扩张矿区（地图中部 2-4 个）：
+第六步 - 铺扩张矿区（地图中部 2-4 个）：
   a. place_overlay 铺 6x6 的 TIB01 或 GEM01
   b. place_terrain_object 在每个矿区中心放 TIBTRE01 矿脉
 
-第六步 - 放置中立建筑（owner=""Neutral""）：
+第七步 - 放置中立建筑（owner=""Neutral""）：
   - 石油井(CAOILD): 对称放在地图中间区域，2-4个
   - 装饰建筑（增加地图细节感，每种 2-4 个，分散放置）：
     商店: CASTOR / CASTOR02
@@ -194,11 +199,6 @@ namespace TSMapEditor.AI.Operations
     风车: CAWIND
     水塔: CABUBB
     路灯: CASOLR
-
-第七步 - 铺地形变化（非常重要！让地图不单调）：
-  fill_terrain 用 LAT Dark Grass 在地图各区域铺 4-6 块 15x20 的不规则区域
-  fill_terrain 用 LAT Rough Grass 在高地周围铺粗糙草地
-  这样地面就不会全是同一种颜色
 
 第八步 - 散布树林：
   place_terrain_object 放 4-6 簇小树林
