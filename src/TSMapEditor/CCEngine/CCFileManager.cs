@@ -335,10 +335,11 @@ namespace TSMapEditor.CCEngine
             // MO control files: (outputName, hashId, headerSignature)
             var moFiles = new[]
             {
-                ("rulesmo.ini",          0xE8DF0937u, "RULES CONTROL FILE"),
-                ("artmo.ini",            0x062DC483u, "ART CONTROL FILE"),
-                ("aimo.ini",             0x66BF0E67u, "AI CONTROL FILE"),
-                ("stringtable_mo.csf",   0xBD835079u, " FSC"),  // Chinese CSF from langmd.mix
+                ("rulesmo.ini",           0xE8DF0937u, "RULES CONTROL FILE"),
+                ("artmo.ini",             0x062DC483u, "ART CONTROL FILE"),
+                ("aimo.ini",              0x66BF0E67u, "AI CONTROL FILE"),
+                ("stringtable_monames.csf", 0x4512DE5Fu, " FSC"),  // Unit names CSF from expandmo98.mix (Chinese lang pack)
+                ("stringtable_moui.csf",    0x4D26D137u, " FSC"),  // UI strings CSF from expandmo98.mix
             };
 
             foreach (var (fileName, hashId, signature) in moFiles)
