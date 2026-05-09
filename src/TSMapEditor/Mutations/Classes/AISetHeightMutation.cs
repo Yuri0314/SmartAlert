@@ -8,11 +8,14 @@ using TSMapEditor.UI;
 namespace TSMapEditor.Mutations.Classes
 {
     /// <summary>
-    /// A mutation that sets the height level of all cells in a rectangular area,
-    /// then uses the editor's RaiseGroundMutation to fix ramp transitions.
+    /// A mutation that raises ground in a rectangular area to a target height,
+    /// simulating repeated clicks of the editor's "Raise Ground" tool.
     /// 
-    /// Strategy: Set heights directly, then apply ramp-fixing by "raising" each
-    /// border cell (which triggers the ramp transition logic).
+    /// The editor's RaiseGroundMutation only raises cells that are at the same
+    /// level as the origin cell, and only by 1 level per call. So to reach
+    /// height N, we need to call it N times, each time on a cell that's at
+    /// the current lowest level. Each level also shrinks the effective area
+    /// to create a natural gradient slope.
     /// </summary>
     public class AISetHeightMutation : Mutation
     {
@@ -49,8 +52,8 @@ namespace TSMapEditor.Mutations.Classes
         {
             undoData = new List<OriginalCellData>();
 
-            // 1. Save original state for the entire affected region (with generous border for ramp effects)
-            int border = 5;
+            // Save original state for undo (with border for ramp effects)
+            int border = 6;
             for (int y = startY - border; y < startY + height + border; y++)
             {
                 for (int x = startX - border; x < startX + width + border; x++)
@@ -67,29 +70,34 @@ namespace TSMapEditor.Mutations.Classes
                 }
             }
 
-            // 2. Gradually raise cells level by level using RaiseGroundMutation
-            //    This ensures proper ramp generation at each step
-            for (byte level = 1; level <= targetHeight; level++)
+            // Raise ground level by level, just like clicking the "Raise Ground" tool repeatedly
+            // Each level shrinks the area by 1 on each side for a natural slope gradient
+            for (int level = 0; level < targetHeight; level++)
             {
-                // Calculate the area for this level (inner area gets raised, creating natural gradient)
-                // Each level shrinks the area by 1 on each side for a natural slope
-                int shrink = level - 1;
-                int areaStartX = startX + shrink;
-                int areaStartY = startY + shrink;
-                int areaWidth = Math.Max(1, width - shrink * 2);
-                int areaHeight = Math.Max(1, height - shrink * 2);
+                int shrink = level;
+                int sx = startX + shrink;
+                int sy = startY + shrink;
+                int w = Math.Max(1, width - shrink * 2);
+                int h = Math.Max(1, height - shrink * 2);
 
-                // Use a brush large enough to cover the area
-                int brushW = areaWidth + 2;
-                int brushH = areaHeight + 2;
-                var brushSize = new BrushSize(brushW, brushH);
+                // Iterate through the area and raise each cell individually
+                // using a 3x3 brush (same as editor's default)
+                var brush = new BrushSize(3, 3);
+                for (int y = sy; y < sy + h; y++)
+                {
+                    for (int x = sx; x < sx + w; x++)
+                    {
+                        var cell = Map.GetTile(x, y);
+                        if (cell == null) continue;
 
-                // Center point of the area
-                int centerX = areaStartX + areaWidth / 2;
-                int centerY = areaStartY + areaHeight / 2;
-
-                var raiseMutation = new RaiseGroundMutation(MutationTarget, new Point2D(centerX, centerY), brushSize);
-                raiseMutation.Perform();
+                        // Only raise if at the expected level for this pass
+                        if (cell.Level == level)
+                        {
+                            var mutation = new RaiseGroundMutation(MutationTarget, new Point2D(x, y), brush);
+                            mutation.Perform();
+                        }
+                    }
+                }
             }
 
             MutationTarget.InvalidateMap();
