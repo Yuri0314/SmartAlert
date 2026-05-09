@@ -221,7 +221,10 @@ namespace TSMapEditor.CCEngine
         {
             var data = LoadFile(name);
             if (data == null)
-                throw new FileNotFoundException("CSF file not found: " + name);
+            {
+                Logger.Log("Optional CSF file not found, skipping: " + name);
+                return;
+            }
             var file = new CsfFile(name);
             file.ParseFromBuffer(data);
             CsfFiles.Add(file);
