@@ -136,9 +136,12 @@ namespace TSMapEditor.AI.Operations
 - 地图上只放：地形、矿区、中立科技建筑、装饰物
 
 1. 铺设矿区（最重要！决定游戏节奏）：
-   - 使用 place_overlay 在目标区域铺矿
+   - 使用 place_overlay 在目标区域铺矿石覆盖物
+   - ★★ 每个矿区中心必须放一个矿脉地形对象（用 place_terrain_object, objectName=""TIBTRE01""）★★
+   - 矿脉(TIBTRE01)会持续在周围生成矿石，没有它矿石采完就没了！
    - 每个出生点附近必须有 1 个 ""起始矿区""（距出生点 10-15 格，8x8 到 10x10 大小）
    - 地图中间区域放 2-4 个 ""扩张矿区""（较小，5x5到8x8，混合矿石和宝石）
+   - 铺矿流程：先 place_overlay 铺矿石，再 place_terrain_object 在中心放 TIBTRE01
    - ★ 矿区必须远离出生点至少 8 格
    - ★★ 矿区位置对称，确保对战公平
 
@@ -163,8 +166,8 @@ namespace TSMapEditor.AI.Operations
    - 第一步：用 fill_terrain + tileSetName=""Clear"" 铺满整个地图作为基础
    - 第二步：用 set_height 在地图中央创建丘陵（高度1-2，区域至少10x10以上）
    - 第三步：用 set_waypoint 设置玩家出生点（对称分布，放在平地处）
-   - 第四步：在每个出生点附近 10-15 格处铺起始矿区（8x8，用 TIB01）
-   - 第五步：在地图中部放 2-4 个扩张矿区（较小，混合 TIB01 和 GEM01）
+   - 第四步：铺起始矿区（每个出生点附近 10-15 格，8x8 TIB01 + 中心放 TIBTRE01 矿脉）
+   - 第五步：铺扩张矿区（地图中部，较小，TIB01/GEM01 + 中心放 TIBTRE01 矿脉）
    - 第六步：用 place_terrain_object 散布 4-6 簇小树林（每簇最大 15x15，density≤0.15）
    - ★★ 不要放任何玩家基地建筑！玩家自己会建 ★★
    - 注意地图对称性（对战公平性）

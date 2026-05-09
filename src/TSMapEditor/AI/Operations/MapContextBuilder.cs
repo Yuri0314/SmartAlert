@@ -248,6 +248,8 @@ namespace TSMapEditor.AI.Operations
             sb.AppendLine("=== 可用的地形对象 (TerrainObject) ===");
             sb.AppendLine("用于 place_terrain_object 操作的 objectName 字段：");
 
+            // Highlight ore spawners separately
+            var oreSpawners = new List<string>();
             var entries = new List<string>();
             foreach (var t in terrainTypes)
             {
@@ -255,12 +257,25 @@ namespace TSMapEditor.AI.Operations
                     continue;
 
                 string displayName = t.GetEditorDisplayName();
-                if (displayName != t.ININame && !string.IsNullOrWhiteSpace(displayName))
-                    entries.Add($"{t.ININame}: {displayName}");
+                string entry = (displayName != t.ININame && !string.IsNullOrWhiteSpace(displayName))
+                    ? $"{t.ININame}: {displayName}"
+                    : t.ININame;
+
+                if (t.SpawnsTiberium)
+                    oreSpawners.Add(entry);
                 else
-                    entries.Add(t.ININame);
+                    entries.Add(entry);
             }
 
+            // Ore spawners section - critical for functional ore patches
+            if (oreSpawners.Count > 0)
+            {
+                sb.AppendLine("  ★ 矿脉/矿井（放在矿区中心，会持续生成矿石）：");
+                sb.AppendLine("  " + string.Join(", ", oreSpawners));
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("  树木/岩石/装饰物：");
             // Compact output
             const int maxPerLine = 8;
             for (int i = 0; i < entries.Count; i += maxPerLine)
