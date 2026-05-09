@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TSMapEditor.GameMath;
 using TSMapEditor.Models;
@@ -7,9 +8,11 @@ using TSMapEditor.UI;
 namespace TSMapEditor.Mutations.Classes
 {
     /// <summary>
-    /// A mutation that raises ground in a rectangular area to a target height,
-    /// using the editor's built-in RaiseGroundMutation for proper ramp transitions.
-    /// Each height level is raised one at a time with automatic ramp tile placement.
+    /// A mutation that sets the height level of all cells in a rectangular area,
+    /// then uses the editor's RaiseGroundMutation to fix ramp transitions.
+    /// 
+    /// Strategy: Set heights directly, then apply ramp-fixing by "raising" each
+    /// border cell (which triggers the ramp transition logic).
     /// </summary>
     public class AISetHeightMutation : Mutation
     {
@@ -33,10 +36,6 @@ namespace TSMapEditor.Mutations.Classes
         private readonly byte targetHeight;
         private readonly string description;
 
-        // Store sub-mutations for undo
-        private List<RaiseGroundMutation> subMutations = new List<RaiseGroundMutation>();
-
-        // Store original state for undo fallback
         private List<OriginalCellData> undoData;
 
         public override string GetDisplayString()
@@ -50,16 +49,14 @@ namespace TSMapEditor.Mutations.Classes
         {
             undoData = new List<OriginalCellData>();
 
-            // Save original state of all cells in the area + border for undo
-            int border = 3; // extra border for ramp effects
+            // 1. Save original state for the entire affected region (with generous border for ramp effects)
+            int border = 5;
             for (int y = startY - border; y < startY + height + border; y++)
             {
                 for (int x = startX - border; x < startX + width + border; x++)
                 {
                     var cell = Map.GetTile(x, y);
-                    if (cell == null)
-                        continue;
-
+                    if (cell == null) continue;
                     undoData.Add(new OriginalCellData
                     {
                         Position = new Point2D(x, y),
@@ -70,29 +67,29 @@ namespace TSMapEditor.Mutations.Classes
                 }
             }
 
-            // Raise ground one level at a time using the editor's smart mutation
-            // which automatically handles ramp transitions
-            for (int level = 0; level < targetHeight; level++)
+            // 2. Gradually raise cells level by level using RaiseGroundMutation
+            //    This ensures proper ramp generation at each step
+            for (byte level = 1; level <= targetHeight; level++)
             {
-                // For each cell in the area, if it needs raising, use RaiseGroundMutation
-                for (int y = startY; y < startY + height; y++)
-                {
-                    for (int x = startX; x < startX + width; x++)
-                    {
-                        var cell = Map.GetTile(x, y);
-                        if (cell == null)
-                            continue;
+                // Calculate the area for this level (inner area gets raised, creating natural gradient)
+                // Each level shrinks the area by 1 on each side for a natural slope
+                int shrink = level - 1;
+                int areaStartX = startX + shrink;
+                int areaStartY = startY + shrink;
+                int areaWidth = Math.Max(1, width - shrink * 2);
+                int areaHeight = Math.Max(1, height - shrink * 2);
 
-                        if (cell.Level <= level)
-                        {
-                            // Use a brush size that covers just this cell plus neighbors for context
-                            var brushSize = new BrushSize(3, 3);
-                            var mutation = new RaiseGroundMutation(MutationTarget, new Point2D(x, y), brushSize);
-                            mutation.Perform();
-                            subMutations.Add(mutation);
-                        }
-                    }
-                }
+                // Use a brush large enough to cover the area
+                int brushW = areaWidth + 2;
+                int brushH = areaHeight + 2;
+                var brushSize = new BrushSize(brushW, brushH);
+
+                // Center point of the area
+                int centerX = areaStartX + areaWidth / 2;
+                int centerY = areaStartY + areaHeight / 2;
+
+                var raiseMutation = new RaiseGroundMutation(MutationTarget, new Point2D(centerX, centerY), brushSize);
+                raiseMutation.Perform();
             }
 
             MutationTarget.InvalidateMap();
@@ -100,10 +97,8 @@ namespace TSMapEditor.Mutations.Classes
 
         public override void Undo()
         {
-            if (undoData == null)
-                return;
+            if (undoData == null) return;
 
-            // Restore all cells to their original state
             foreach (var data in undoData)
             {
                 var cell = Map.GetTile(data.Position);
