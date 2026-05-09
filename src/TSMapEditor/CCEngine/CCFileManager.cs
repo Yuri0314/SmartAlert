@@ -356,8 +356,8 @@ namespace TSMapEditor.CCEngine
                 return;
             }
 
-            // Save to game directory
-            string outputPath = Path.Combine(GameDirectory, moRulesFileName);
+            // Save to editor's own directory (never modify the game directory)
+            string outputPath = Path.Combine(Environment.CurrentDirectory, moRulesFileName);
             try
             {
                 File.WriteAllBytes(outputPath, data);
