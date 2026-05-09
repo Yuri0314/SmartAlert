@@ -148,8 +148,16 @@ namespace TSMapEditor.AI.Operations
 
 3. 布置装饰（scatter_decorations）：
    - 使用 place_terrain_object 散布树木/岩石
-   - density 参数控制密度: 稀疏森林 0.15, 正常 0.35, 密林 0.6
-   - 避开基地区域和道路
+   - density 参数控制密度: 稀疏 0.08, 正常 0.15, 密林 0.3
+   - ★★ 绝对不能在整个地图上铺树！只在特定小区域放几簇树林 ★★
+   - 每簇树林区域不超过 15x15 格
+   - 全图最多放 4-6 簇树林（对称分布）
+   - 必须避开的区域（不放树）：
+     * 出生点周围 25 格范围（整个基地区域）
+     * 矿区周围 5 格
+     * 高地坡道区域
+     * 道路/通道
+   - 树林用途：分隔战场区域、提供掩护、装饰地图边缘
 
 4. 创建完整对战地图（必须严格按此顺序）：
    - 第一步：用 fill_terrain + tileSetName=""Clear"" 铺满整个地图作为基础
@@ -157,7 +165,7 @@ namespace TSMapEditor.AI.Operations
    - 第三步：用 set_waypoint 设置玩家出生点（对称分布，放在平地 height=0 处）
    - 第四步：在出生点附近建基地（使用多个 place_building，放在平地处）
    - 第五步：用 place_overlay 在出生点附近铺矿区（★ 必须使用上面列出的矿石名称，远离建筑 8+ 格）
-   - 第六步：用 place_terrain_object 散布装饰物（树/石，避开基地和矿区）
+   - 第六步：用 place_terrain_object 散布 4-6 簇小树林（每簇最大 15x15，density≤0.15，避开基地和矿区）
    - 注意地图对称性（对战公平性）
 
 === set_height 使用规则 ===
