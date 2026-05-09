@@ -8,124 +8,113 @@ using TSMapEditor.UI;
 namespace TSMapEditor.Mutations.Classes
 {
     /// <summary>
-    /// A mutation that raises ground in a rectangular area to a target height,
-    /// simulating repeated clicks of the editor's "Raise Ground" tool.
+    /// A mutation that raises ground in a rectangular area to a target height level.
     /// 
-    /// The editor's RaiseGroundMutation only raises cells that are at the same
-    /// level as the origin cell, and only by 1 level per call. So to reach
-    /// height N, we need to call it N times, each time on a cell that's at
-    /// the current lowest level. Each level also shrinks the effective area
-    /// to create a natural gradient slope.
+    /// Key insight: The editor's RaiseGroundMutation works by raising cells by 1 level,
+    /// then calling Process() which does:
+    ///   1) ProcessCells() - recursively fixes height gaps > 1
+    ///   2) CellHeightFixes() - special case fixes
+    ///   3) ApplyRamps() - places correct ramp tiles based on neighbor heights
+    /// 
+    /// The problem with calling RaiseGroundMutation per-cell is that each instance
+    /// has its own totalProcessedCells list, so edge ramps get overwritten.
+    /// 
+    /// Solution: Inherit from RaiseGroundMutation to reuse its ramp tables and
+    /// CheckCell logic, but override Perform() to batch-raise ALL cells in the area
+    /// for each level, then call Process() ONCE per level for the entire area.
+    /// This ensures all edge transitions are computed together.
     /// </summary>
-    public class AISetHeightMutation : Mutation
+    public class AISetHeightMutation : RaiseGroundMutation
     {
         public AISetHeightMutation(IMutationTarget mutationTarget,
             int startX, int startY, int width, int height,
             byte targetHeight, string description)
-            : base(mutationTarget)
+            : base(mutationTarget,
+                   new Point2D(startX + width / 2, startY + height / 2),
+                   new BrushSize(3, 3))
         {
             this.startX = startX;
             this.startY = startY;
-            this.width = width;
-            this.height = height;
+            this.areaWidth = width;
+            this.areaHeight = height;
             this.targetHeight = targetHeight;
-            this.description = description;
+            this.displayDescription = description;
         }
 
         private readonly int startX;
         private readonly int startY;
-        private readonly int width;
-        private readonly int height;
+        private readonly int areaWidth;
+        private readonly int areaHeight;
         private readonly byte targetHeight;
-        private readonly string description;
-
-        private List<OriginalCellData> undoData;
+        private readonly string displayDescription;
 
         public override string GetDisplayString()
         {
-            return string.IsNullOrEmpty(description)
-                ? $"AI: Set height to {targetHeight} at ({startX},{startY}) {width}x{height}"
-                : $"AI: {description}";
+            return string.IsNullOrEmpty(displayDescription)
+                ? $"AI: Set height to {targetHeight} at ({startX},{startY}) {areaWidth}x{areaHeight}"
+                : $"AI: {displayDescription}";
         }
 
         public override void Perform()
         {
-            undoData = new List<OriginalCellData>();
-
-            // Save original state for undo (with border for ramp effects)
-            int border = 6;
-            for (int y = startY - border; y < startY + height + border; y++)
-            {
-                for (int x = startX - border; x < startX + width + border; x++)
-                {
-                    var cell = Map.GetTile(x, y);
-                    if (cell == null) continue;
-                    undoData.Add(new OriginalCellData
-                    {
-                        Position = new Point2D(x, y),
-                        OriginalHeight = cell.Level,
-                        OriginalTileIndex = cell.TileIndex,
-                        OriginalSubTileIndex = cell.SubTileIndex
-                    });
-                }
-            }
-
-            // Raise ground level by level, just like clicking the "Raise Ground" tool repeatedly
-            // Each level shrinks the area by 1 on each side for a natural slope gradient
+            // Raise ground one level at a time, with shrinking area for natural gradient
             for (int level = 0; level < targetHeight; level++)
             {
+                // Shrink area by 1 on each side per level for natural slope
                 int shrink = level;
                 int sx = startX + shrink;
                 int sy = startY + shrink;
-                int w = Math.Max(1, width - shrink * 2);
-                int h = Math.Max(1, height - shrink * 2);
+                int w = Math.Max(1, areaWidth - shrink * 2);
+                int h = Math.Max(1, areaHeight - shrink * 2);
 
-                // Iterate through the area and raise each cell individually
-                // using a 3x3 brush (same as editor's default)
-                var brush = new BrushSize(3, 3);
+                // If area is too small, stop
+                if (w <= 0 || h <= 0)
+                    break;
+
+                // Clear processing lists for this level (but keep undoData!)
+                cellsToProcess.Clear();
+                processedCellsThisIteration.Clear();
+                totalProcessedCells.Clear();
+
+                bool anyRaised = false;
+
+                // Batch-raise ALL cells in the area that are at current level
                 for (int y = sy; y < sy + h; y++)
                 {
                     for (int x = sx; x < sx + w; x++)
                     {
-                        var cell = Map.GetTile(x, y);
+                        var cellCoords = new Point2D(x, y);
+                        var cell = Map.GetTile(cellCoords);
                         if (cell == null) continue;
+                        if (cell.Level != level) continue;
+                        if (!IsCellMorphable(cell)) continue;
 
-                        // Only raise if at the expected level for this pass
-                        if (cell.Level == level)
+                        // Save undo data and raise by 1
+                        AddCellToUndoData(cellCoords);
+                        cell.Level++;
+                        cell.ChangeTileIndex(0, 0);
+
+                        // Register all 8 surrounding cells for ramp processing
+                        foreach (var offset in SurroundingTiles)
                         {
-                            var mutation = new RaiseGroundMutation(MutationTarget, new Point2D(x, y), brush);
-                            mutation.Perform();
+                            RegisterCell(cellCoords + offset);
                         }
+
+                        MarkCellAsProcessed(cellCoords);
+                        anyRaised = true;
                     }
                 }
-            }
 
-            MutationTarget.InvalidateMap();
-        }
-
-        public override void Undo()
-        {
-            if (undoData == null) return;
-
-            foreach (var data in undoData)
-            {
-                var cell = Map.GetTile(data.Position);
-                if (cell != null)
+                // Process() does the magic: fixes height gaps, then applies ramp tiles
+                // for ALL registered cells at once — this is the key difference from
+                // calling RaiseGroundMutation per-cell!
+                if (anyRaised)
                 {
-                    cell.Level = data.OriginalHeight;
-                    cell.ChangeTileIndex(data.OriginalTileIndex, data.OriginalSubTileIndex);
+                    Process();
                 }
             }
 
             MutationTarget.InvalidateMap();
-        }
-
-        private struct OriginalCellData
-        {
-            public Point2D Position;
-            public byte OriginalHeight;
-            public int OriginalTileIndex;
-            public byte OriginalSubTileIndex;
         }
     }
 }
