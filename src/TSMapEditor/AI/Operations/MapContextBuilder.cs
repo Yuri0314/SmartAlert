@@ -41,11 +41,25 @@ namespace TSMapEditor.AI.Operations
             // map.Size is the logical dimension, but actual cell coords range from
             // 1 to approximately Size.X + Size.Y - 1 in both X and Y, forming a diamond.
             int maxCoord = map.Size.X + map.Size.Y - 1;
+            int centerX = maxCoord / 2;
+            int centerY = maxCoord / 2;
+            // Safe range is roughly the inner 70% of the diamond
+            int safeRadius = (int)(Math.Min(map.Size.X, map.Size.Y) * 0.7);
+            int safeMinX = centerX - safeRadius;
+            int safeMaxX = centerX + safeRadius;
+            int safeMinY = centerY - safeRadius;
+            int safeMaxY = centerY + safeRadius;
 
             sb.AppendLine("=== 当前地图信息 ===");
             sb.AppendLine($"地图逻辑尺寸: {map.Size.X} x {map.Size.Y}");
-            sb.AppendLine($"坐标系: 等距菱形坐标系，有效坐标范围约 X = 1 到 {maxCoord}, Y = 1 到 {maxCoord}（菱形区域，非所有组合有效）");
-            sb.AppendLine("重要: 如果用户通过选区指定了坐标范围，请严格使用选区内的坐标，不要自行推测坐标。");
+            sb.AppendLine($"地图中心坐标: ({centerX}, {centerY})");
+            sb.AppendLine($"安全放置范围: X = {safeMinX} 到 {safeMaxX}, Y = {safeMinY} 到 {safeMaxY}");
+            sb.AppendLine("坐标系说明: 地图是等距菱形，不是方形。坐标 (x,y) 需满足 x+y 大致在地图尺寸附近才有效。");
+            sb.AppendLine("重要规则:");
+            sb.AppendLine($"  - 所有操作的坐标必须在安全范围内（{safeMinX}-{safeMaxX}, {safeMinY}-{safeMaxY}）");
+            sb.AppendLine($"  - 地图中心是 ({centerX}, {centerY})，以此为基准对称布局");
+            sb.AppendLine($"  - fill_terrain 铺全图时使用坐标 (1,1) 和尺寸 ({maxCoord},{maxCoord})，系统会自动裁剪无效区域");
+            sb.AppendLine("  - 如果用户通过选区指定了坐标范围，请严格使用选区内的坐标");
             sb.AppendLine();
         }
 
