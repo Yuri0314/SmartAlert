@@ -1,4 +1,4 @@
-﻿global using static TSMapEditor.Misc.Translator;
+global using static TSMapEditor.Misc.Translator;
 
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -58,8 +58,14 @@ namespace TSMapEditor.Rendering
 
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             TranslatorSetup.LoadTranslations();
-            Constants.Init();
             new UserSettings();
+
+            // Apply mod profile BEFORE Constants.Init so the correct config is loaded
+            string modProfile = UserSettings.Instance.ModProfile.GetValue();
+            if (!string.IsNullOrEmpty(modProfile))
+                Helpers.ActiveModProfile = modProfile;
+
+            Constants.Init();
             TranslatorSetup.SetActiveTranslation(UserSettings.Instance.Language);
 
             AutosaveTimer.Purge();
