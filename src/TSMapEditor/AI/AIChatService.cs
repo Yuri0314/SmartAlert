@@ -179,8 +179,9 @@ namespace TSMapEditor.AI
                         // Map was created but doesn't have enough spawn points - auto-add at safe isometric positions
                         var mapSize = mapOperator.GetMapSize();
                         int w = mapSize.X; // e.g. 100 for 100x100 map
-                        // Safe positions: (W±0.4W, W±0.4W) guarantees |0.4W|+|0.4W| = 0.8W < W-1
-                        int offset = (int)(w * 0.4);
+                        // Safe positions: 65% from center (matching official MO map average)
+                        // |0.32W|+|0.32W| = 0.64W ≈ 65% of (W-1)
+                        int offset = (int)(w * 0.32);
                         var defaultWaypoints = new List<MapOperation>
                         {
                             new MapOperation { Type = "set_waypoint", X = w - offset, Y = w - offset, WaypointIndex = 0, Description = "自动补全: 玩家1出生点(左上)" },
@@ -204,6 +205,19 @@ namespace TSMapEditor.AI
             string fullMessage = result.Message;
             if (!string.IsNullOrEmpty(operationResult))
                 fullMessage += "\n\n" + operationResult;
+
+            // Auto-set map name if AI provided one (pattern: "地图名称: XXX")
+            if (result.Operations.Count > 0 && mapOperator != null)
+            {
+                var nameMatch = System.Text.RegularExpressions.Regex.Match(
+                    result.Message ?? "", @"地图名称[:：]\s*(.+?)(?:\s*[,，。\n]|$)");
+                if (nameMatch.Success)
+                {
+                    string mapName = nameMatch.Groups[1].Value.Trim();
+                    mapOperator.SetMapName(mapName);
+                    Logger.Log($"Auto-set map name: {mapName}");
+                }
+            }
 
             // Add assistant message to history
             chatHistory.Add(ChatMessage.Assistant(fullMessage));
@@ -266,8 +280,7 @@ namespace TSMapEditor.AI
 
                     // Parse response (safe to do on background thread)
                     var (message, operations) = IntentParser.Parse(aiResponse);
-                    Logger.Log($"AI Parsed: {operations.Count} ops: {string.Join(", ", operations.Select(o => o.Type))}");
-                    Logger.Log($"AI Raw (first 3000): {aiResponse.Substring(0, Math.Min(3000, aiResponse.Length))}");
+                    Logger.Log($"AI Parsed: {operations.Count} ops, types: {string.Join(", ", operations.Select(o => o.Type).Distinct())}");
 
                     // Queue the result for main thread execution
                     lock (pendingLock)

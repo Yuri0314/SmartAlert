@@ -49,6 +49,18 @@ namespace TSMapEditor.AI
         }
 
         /// <summary>
+        /// Sets the map name in Basic section.
+        /// </summary>
+        public void SetMapName(string name)
+        {
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                map.Basic.Name = name;
+                Logger.Log($"Map name set to: {name}");
+            }
+        }
+
+        /// <summary>
         /// Executes a list of map operations, returning a summary of what was done.
         /// </summary>
         public string ExecuteOperations(List<MapOperation> operations)
@@ -63,9 +75,13 @@ namespace TSMapEditor.AI
                 try
                 {
                     string result = ExecuteOperation(op);
-                    Logger.Log($"AI Op: {op.Type} at ({op.X},{op.Y}) => {result}");
                     if (!string.IsNullOrEmpty(result))
+                    {
+                        // Log errors/warnings (failures contain "不在" or "失败")
+                        if (result.Contains("不在") || result.Contains("失败") || result.Contains("找不到"))
+                            Logger.Log($"AI Op FAIL: {op.Type} at ({op.X},{op.Y}) => {result}");
                         results.Add(result);
+                    }
                 }
                 catch (Exception ex)
                 {
