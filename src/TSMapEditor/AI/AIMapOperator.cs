@@ -93,9 +93,47 @@ namespace TSMapEditor.AI
 
             return string.Join("\n", results);
         }
+        /// <summary>
+        /// Checks if a coordinate is within the valid isometric diamond.
+        /// For a WxH map, valid area satisfies: |x-W| + |y-W| <= W-1
+        /// </summary>
+        private bool IsInDiamond(int x, int y)
+        {
+            int w = map.Size.X;
+            return Math.Abs(x - w) + Math.Abs(y - w) <= w - 1;
+        }
+
+        /// <summary>
+        /// Clamps a coordinate to the nearest valid position inside the diamond.
+        /// </summary>
+        private Point2D ClampToDiamond(int x, int y)
+        {
+            int w = map.Size.X;
+            int dx = x - w;
+            int dy = y - w;
+            int dist = Math.Abs(dx) + Math.Abs(dy);
+            int maxDist = w - 1;
+            if (dist <= maxDist)
+                return new Point2D(x, y);
+
+            // Scale down proportionally to fit inside diamond
+            double scale = (double)maxDist / dist;
+            int newX = w + (int)(dx * scale);
+            int newY = w + (int)(dy * scale);
+            return new Point2D(newX, newY);
+        }
 
         private string ExecuteOperation(MapOperation op)
         {
+            // Auto-clamp coordinates to valid diamond area (except fill_terrain which handles areas)
+            if (op.Type?.ToLowerInvariant() != "fill_terrain" && !IsInDiamond(op.X, op.Y))
+            {
+                var clamped = ClampToDiamond(op.X, op.Y);
+                Logger.Log($"AI coord clamp: {op.Type} ({op.X},{op.Y}) -> ({clamped.X},{clamped.Y})");
+                op.X = clamped.X;
+                op.Y = clamped.Y;
+            }
+
             switch (op.Type?.ToLowerInvariant())
             {
                 case "fill_terrain":
