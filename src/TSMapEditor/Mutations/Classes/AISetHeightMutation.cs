@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using TSMapEditor.GameMath;
-using TSMapEditor.Models;
 using TSMapEditor.Mutations.Classes.HeightMutations;
 using TSMapEditor.UI;
 
@@ -10,19 +8,17 @@ namespace TSMapEditor.Mutations.Classes
     /// <summary>
     /// A mutation that raises ground in a rectangular area to a target height level.
     /// 
-    /// Key insight: The editor's RaiseGroundMutation works by raising cells by 1 level,
-    /// then calling Process() which does:
-    ///   1) ProcessCells() - recursively fixes height gaps > 1
-    ///   2) CellHeightFixes() - special case fixes
-    ///   3) ApplyRamps() - places correct ramp tiles based on neighbor heights
+    /// Uses the editor's built-in RaiseGround() method directly, which handles
+    /// all ramp transitions correctly. The trick is to use a BrushSize large 
+    /// enough to cover the entire target area.
     /// 
-    /// The problem with calling RaiseGroundMutation per-cell is that each instance
-    /// has its own totalProcessedCells list, so edge ramps get overwritten.
+    /// RaiseGround() internally does:
+    ///   xSize = BrushSize.Width - 2;
+    ///   ySize = BrushSize.Height - 2;
+    /// So BrushSize = (areaWidth + 2, areaHeight + 2) gives the exact target area.
     /// 
-    /// Solution: Inherit from RaiseGroundMutation to reuse its ramp tables and
-    /// CheckCell logic, but override Perform() to batch-raise ALL cells in the area
-    /// for each level, then call Process() ONCE per level for the entire area.
-    /// This ensures all edge transitions are computed together.
+    /// Each call to RaiseGround() raises all cells at the origin's level by 1.
+    /// To reach height N, we call it N times from the same origin.
     /// </summary>
     public class AISetHeightMutation : RaiseGroundMutation
     {
@@ -31,7 +27,7 @@ namespace TSMapEditor.Mutations.Classes
             byte targetHeight, string description)
             : base(mutationTarget,
                    new Point2D(startX + width / 2, startY + height / 2),
-                   new BrushSize(3, 3))
+                   new BrushSize(width + 2, height + 2))
         {
             this.startX = startX;
             this.startY = startY;
@@ -57,61 +53,34 @@ namespace TSMapEditor.Mutations.Classes
 
         public override void Perform()
         {
-            // Raise ground one level at a time, with shrinking area for natural gradient
+            // Call the editor's own RaiseGround() method for each height level.
+            // RaiseGround() uses BrushSize to determine the area, raises all cells
+            // at OriginCell's current level by 1, and calls Process() which
+            // correctly handles ALL ramp transitions in one pass.
+            //
+            // For height N with shrinking gradient:
+            // Level 0→1: full area (BrushSize = areaWidth+2 x areaHeight+2)
+            // Level 1→2: shrunk area (BrushSize = areaWidth x areaHeight)  
+            // Level 2→3: further shrunk, etc.
+            
             for (int level = 0; level < targetHeight; level++)
             {
-                // Shrink area by 1 on each side per level for natural slope
                 int shrink = level;
-                int sx = startX + shrink;
-                int sy = startY + shrink;
-                int w = Math.Max(1, areaWidth - shrink * 2);
-                int h = Math.Max(1, areaHeight - shrink * 2);
+                int w = Math.Max(3, areaWidth - shrink * 2 + 2);
+                int h = Math.Max(3, areaHeight - shrink * 2 + 2);
 
-                // If area is too small, stop
-                if (w <= 0 || h <= 0)
-                    break;
-
-                // Clear processing lists for this level (but keep undoData!)
-                cellsToProcess.Clear();
-                processedCellsThisIteration.Clear();
-                totalProcessedCells.Clear();
-
-                bool anyRaised = false;
-
-                // Batch-raise ALL cells in the area that are at current level
-                for (int y = sy; y < sy + h; y++)
-                {
-                    for (int x = sx; x < sx + w; x++)
-                    {
-                        var cellCoords = new Point2D(x, y);
-                        var cell = Map.GetTile(cellCoords);
-                        if (cell == null) continue;
-                        if (cell.Level != level) continue;
-                        if (!IsCellMorphable(cell)) continue;
-
-                        // Save undo data and raise by 1
-                        AddCellToUndoData(cellCoords);
-                        cell.Level++;
-                        cell.ChangeTileIndex(0, 0);
-
-                        // Register all 8 surrounding cells for ramp processing
-                        foreach (var offset in SurroundingTiles)
-                        {
-                            RegisterCell(cellCoords + offset);
-                        }
-
-                        MarkCellAsProcessed(cellCoords);
-                        anyRaised = true;
-                    }
-                }
-
-                // Process() does the magic: fixes height gaps, then applies ramp tiles
-                // for ALL registered cells at once — this is the key difference from
-                // calling RaiseGroundMutation per-cell!
-                if (anyRaised)
-                {
-                    Process();
-                }
+                // Reconfigure brush size and origin for this level's area
+                // We need to use reflection or a workaround since BrushSize/OriginCell are readonly
+                // Instead, create a new instance for each level
+                int centerX = startX + areaWidth / 2;
+                int centerY = startY + areaHeight / 2;
+                
+                var levelMutation = new RaiseGroundMutation(
+                    MutationTarget,
+                    new Point2D(centerX, centerY),
+                    new BrushSize(w, h));
+                
+                levelMutation.Perform();
             }
 
             MutationTarget.InvalidateMap();
