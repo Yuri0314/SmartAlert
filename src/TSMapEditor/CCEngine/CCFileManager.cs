@@ -36,8 +36,9 @@ namespace TSMapEditor.CCEngine
             iniFile.DoForEveryValueInSection("MIXFiles", ProcessMixFileEntry);
             iniFile.DoForEveryValueInSection("StringTables", LoadStringTable);
 
-            // Auto-extract MO rules file from expandmo99.mix if it doesn't exist on disk
-            ExtractMORulesIfNeeded();
+            // Auto-extract MO rules file from expandmo99.mix if in MentalOmega profile
+            if (string.Equals(Helpers.ActiveModProfile, "MentalOmega", StringComparison.OrdinalIgnoreCase))
+                ExtractMORulesIfNeeded();
         }
 
         /// <summary>

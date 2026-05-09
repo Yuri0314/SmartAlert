@@ -1,4 +1,4 @@
-﻿using Rampastring.Tools;
+using Rampastring.Tools;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -60,7 +60,8 @@ namespace TSMapEditor.Settings
 
                 TextEditorPath,
 
-                Language
+                Language,
+                ModProfile
             };
 
             foreach (var setting in settings)
@@ -123,6 +124,8 @@ namespace TSMapEditor.Settings
         public StringSetting TextEditorPath = new StringSetting(General, nameof(TextEditorPath), string.Empty);
 
         public StringSetting Language = new StringSetting(General, nameof(Language), string.Empty);
+
+        public StringSetting ModProfile = new StringSetting(General, nameof(ModProfile), string.Empty);
 
         public RecentFiles RecentFiles = new RecentFiles();
     }

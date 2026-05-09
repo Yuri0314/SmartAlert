@@ -1,4 +1,4 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
 using Rampastring.XNAUI.XNAControls;
@@ -32,6 +32,7 @@ namespace TSMapEditor.UI
         private EditorTextBox tbMapPath;
         private EditorButton btnBrowseMapPath;
         private EditorButton btnLoad;
+        private XNADropDown ddModProfile;
         private FileBrowserListBox lbFileList;
 
         private SettingsPanel settingsPanel;
@@ -86,10 +87,44 @@ namespace TSMapEditor.UI
             AddChild(btnBrowseGameDirectory);
             btnBrowseGameDirectory.LeftClick += BtnBrowseGameDirectory_LeftClick;
 
+            // Mod profile selector
+            var lblModProfile = new XNALabel(WindowManager);
+            lblModProfile.Name = nameof(lblModProfile);
+            lblModProfile.X = Constants.UIEmptySideSpace;
+            lblModProfile.Y = tbGameDirectory.Bottom + Constants.UIEmptyTopSpace;
+            lblModProfile.Text = Translate(this, "ModProfileText", "Mod Profile:");
+            AddChild(lblModProfile);
+
+            ddModProfile = new XNADropDown(WindowManager);
+            ddModProfile.Name = nameof(ddModProfile);
+            ddModProfile.X = lblModProfile.Right + Constants.UIEmptySideSpace;
+            ddModProfile.Y = lblModProfile.Y - 2;
+            ddModProfile.Width = 180;
+            ddModProfile.AddItem(new XNADropDownItem() { Text = "Red Alert 2 / Yuri's Revenge", Tag = "" });
+            ddModProfile.AddItem(new XNADropDownItem() { Text = "Mental Omega", Tag = "MentalOmega" });
+            ddModProfile.SelectedIndex = 0;
+
+            // Restore saved selection
+            string savedProfile = UserSettings.Instance.ModProfile.GetValue();
+            for (int i = 0; i < ddModProfile.Items.Count; i++)
+            {
+                if (string.Equals((string)ddModProfile.Items[i].Tag, savedProfile, StringComparison.OrdinalIgnoreCase))
+                {
+                    ddModProfile.SelectedIndex = i;
+                    break;
+                }
+            }
+
+            ddModProfile.SelectedIndexChanged += DdModProfile_SelectedIndexChanged;
+            AddChild(ddModProfile);
+
+            // Apply initial mod profile
+            ApplyModProfile();
+
             var lblMapPath = new XNALabel(WindowManager);
             lblMapPath.Name = nameof(lblMapPath);
             lblMapPath.X = Constants.UIEmptySideSpace;
-            lblMapPath.Y = tbGameDirectory.Bottom + Constants.UIEmptyTopSpace;
+            lblMapPath.Y = ddModProfile.Bottom + Constants.UIEmptyTopSpace;
             lblMapPath.Text = Translate(this, "MapPathText", "Path of the map file to load (can be relative to game directory):");
             AddChild(lblMapPath);
 
@@ -395,6 +430,18 @@ namespace TSMapEditor.UI
             WindowManager.CenterControlOnScreen(this);
 
             _ = UserSettings.Instance.SaveSettingsAsync();
+        }
+
+        private void DdModProfile_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            ApplyModProfile();
+        }
+
+        private void ApplyModProfile()
+        {
+            string profile = (string)ddModProfile.SelectedItem.Tag;
+            Helpers.ActiveModProfile = profile;
+            UserSettings.Instance.ModProfile.UserDefinedValue = profile;
         }
 
         private void BtnBrowseGameDirectory_LeftClick(object sender, EventArgs e)

@@ -1,4 +1,4 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Rampastring.Tools;
 using Rampastring.XNAUI;
@@ -785,9 +785,21 @@ namespace TSMapEditor
             return false;
         }
 
+        /// <summary>
+        /// The currently active mod profile name (e.g. "MentalOmega").
+        /// Empty or null means vanilla (Default config only).
+        /// </summary>
+        public static string ActiveModProfile { get; set; } = string.Empty;
+
         public static IniFile ReadConfigINI(string path, bool applyTranslation = true, bool throwIfNotFound = false)
         {
             string customPath = Path.Combine(Environment.CurrentDirectory, "Config", path);
+
+            // Check mod-specific config directory first (e.g. Config/MentalOmega/Constants.ini)
+            string modPath = !string.IsNullOrEmpty(ActiveModProfile)
+                ? Path.Combine(Environment.CurrentDirectory, "Config", ActiveModProfile, path)
+                : null;
+
             string defaultPath = Path.Combine(Environment.CurrentDirectory, "Config", "Default", path);
 
             IniFile iniFile;
@@ -795,6 +807,10 @@ namespace TSMapEditor
             if (File.Exists(customPath))
             {
                 iniFile = new IniFile(customPath);
+            }
+            else if (modPath != null && File.Exists(modPath))
+            {
+                iniFile = new IniFile(modPath);
             }
             else
             {
