@@ -97,6 +97,9 @@ namespace TSMapEditor.AI
 
             [JsonPropertyName("temperature")]
             public double Temperature { get; set; }
+
+            [JsonPropertyName("max_tokens")]
+            public int MaxTokens { get; set; } = 16384;
         }
 
         private class RequestMessage
