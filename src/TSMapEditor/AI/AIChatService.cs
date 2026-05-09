@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Rampastring.Tools;
@@ -167,6 +168,28 @@ namespace TSMapEditor.AI
                 try
                 {
                     operationResult = mapOperator.ExecuteOperations(result.Operations);
+
+                    // Post-execution validation: check if map operations included
+                    // map creation ops but no waypoints - auto-add default spawn points
+                    bool hasTerrainOps = result.Operations.Any(o => o.Type == "fill_terrain");
+                    bool hasWaypointOps = result.Operations.Any(o => o.Type == "set_waypoint");
+
+                    if (hasTerrainOps && !hasWaypointOps)
+                    {
+                        // AI generated terrain but forgot waypoints - auto-add 4 spawn points
+                        var mapSize = mapOperator.GetMapSize();
+                        int margin = Math.Max(15, mapSize.X / 6);
+                        var defaultWaypoints = new List<MapOperation>
+                        {
+                            new MapOperation { Type = "set_waypoint", X = margin, Y = margin, WaypointIndex = 0, Description = "自动补全: 玩家1出生点(左上)" },
+                            new MapOperation { Type = "set_waypoint", X = mapSize.X - margin, Y = margin, WaypointIndex = 1, Description = "自动补全: 玩家2出生点(右上)" },
+                            new MapOperation { Type = "set_waypoint", X = margin, Y = mapSize.Y - margin, WaypointIndex = 2, Description = "自动补全: 玩家3出生点(左下)" },
+                            new MapOperation { Type = "set_waypoint", X = mapSize.X - margin, Y = mapSize.Y - margin, WaypointIndex = 3, Description = "自动补全: 玩家4出生点(右下)" },
+                        };
+                        string wpResult = mapOperator.ExecuteOperations(defaultWaypoints);
+                        operationResult += "\n\n⚠️ AI 未生成出生点，已自动在四角补全4个出生点:\n" + wpResult;
+                        Logger.Log("Auto-fix: Added 4 default waypoints because AI forgot them");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -241,6 +264,8 @@ namespace TSMapEditor.AI
 
                     // Parse response (safe to do on background thread)
                     var (message, operations) = IntentParser.Parse(aiResponse);
+                    Logger.Log($"AI Parsed: {operations.Count} ops: {string.Join(", ", operations.Select(o => o.Type))}");
+                    Logger.Log($"AI Raw (first 500): {aiResponse.Substring(0, Math.Min(500, aiResponse.Length))}");
 
                     // Queue the result for main thread execution
                     lock (pendingLock)

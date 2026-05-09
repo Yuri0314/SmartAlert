@@ -33,6 +33,14 @@ namespace TSMapEditor.AI
         }
 
         /// <summary>
+        /// Returns the map dimensions (width, height).
+        /// </summary>
+        public Point2D GetMapSize()
+        {
+            return new Point2D(map.Size.X, map.Size.Y);
+        }
+
+        /// <summary>
         /// Executes a list of map operations, returning a summary of what was done.
         /// </summary>
         public string ExecuteOperations(List<MapOperation> operations)
