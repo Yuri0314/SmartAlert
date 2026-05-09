@@ -25,6 +25,7 @@ namespace TSMapEditor.AI.Operations
 
             AppendMapDimensions(sb, map);
             AppendTileSetCatalog(sb, theaterGraphics);
+            AppendOverlayCatalog(sb, map);
             AppendHouseList(sb, map);
             AppendUnitCatalog(sb, map);
             AppendTerrainTypeCatalog(sb, map);
@@ -110,6 +111,33 @@ namespace TSMapEditor.AI.Operations
 
             sb.AppendLine();
             sb.AppendLine("注意: TileSetName 必须完全匹配上面列出的名称（区分大小写）。创建地图时第一个操作必须使用 \"Clear\"。");
+            sb.AppendLine();
+        }
+
+        /// <summary>
+        /// Appends available overlay types (ore, gems) for the AI.
+        /// </summary>
+        private static void AppendOverlayCatalog(StringBuilder sb, Map map)
+        {
+            sb.AppendLine("=== 可用的覆盖物类型 (Overlay) ===");
+            sb.AppendLine("place_overlay 的 objectName 必须使用以下名称：");
+
+            // Find ore/tiberium overlays
+            var oreTypes = map.Rules.OverlayTypes.Where(o => o.Tiberium).Take(3).ToList();
+            if (oreTypes.Count > 0)
+            {
+                sb.AppendLine($"  矿石(ore): \"{oreTypes[0].ININame}\" ← 铺矿时使用此名称");
+            }
+
+            // Find gem overlays
+            var gemTypes = map.Rules.OverlayTypes.Where(o =>
+                o.ININame.StartsWith("GEM", StringComparison.OrdinalIgnoreCase)).Take(1).ToList();
+            if (gemTypes.Count > 0)
+            {
+                sb.AppendLine($"  宝石(gem): \"{gemTypes[0].ININame}\" ← 铺宝石时使用此名称");
+            }
+
+            sb.AppendLine("  ★ 重要：objectName 必须是上面列出的精确名称，不要猜测");
             sb.AppendLine();
         }
 
