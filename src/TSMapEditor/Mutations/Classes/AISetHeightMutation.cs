@@ -1,4 +1,5 @@
 using System;
+using Rampastring.Tools;
 using TSMapEditor.GameMath;
 using TSMapEditor.Mutations.Classes.HeightMutations;
 using TSMapEditor.UI;
@@ -7,20 +8,10 @@ namespace TSMapEditor.Mutations.Classes
 {
     /// <summary>
     /// A mutation that raises ground in a rectangular area to a target height level.
-    /// 
-    /// Uses the editor's built-in RaiseGround() method directly, which handles
-    /// all ramp transitions correctly. The trick is to use a BrushSize large 
-    /// enough to cover the entire target area.
-    /// 
-    /// RaiseGround() internally does:
-    ///   xSize = BrushSize.Width - 2;
-    ///   ySize = BrushSize.Height - 2;
-    /// So BrushSize = (areaWidth + 2, areaHeight + 2) gives the exact target area.
-    /// 
-    /// Each call to RaiseGround() raises all cells at the origin's level by 1.
-    /// To reach height N, we call it N times from the same origin.
+    /// Uses FSRaiseGroundMutation (non-steep, same as the editor's default toolbar button)
+    /// with a large BrushSize to cover the entire target area.
     /// </summary>
-    public class AISetHeightMutation : RaiseGroundMutation
+    public class AISetHeightMutation : FSRaiseGroundMutation
     {
         public AISetHeightMutation(IMutationTarget mutationTarget,
             int startX, int startY, int width, int height,
@@ -53,34 +44,33 @@ namespace TSMapEditor.Mutations.Classes
 
         public override void Perform()
         {
-            // Call the editor's own RaiseGround() method for each height level.
-            // RaiseGround() uses BrushSize to determine the area, raises all cells
-            // at OriginCell's current level by 1, and calls Process() which
-            // correctly handles ALL ramp transitions in one pass.
-            //
-            // For height N with shrinking gradient:
-            // Level 0→1: full area (BrushSize = areaWidth+2 x areaHeight+2)
-            // Level 1→2: shrunk area (BrushSize = areaWidth x areaHeight)  
-            // Level 2→3: further shrunk, etc.
-            
+            int centerX = startX + areaWidth / 2;
+            int centerY = startY + areaHeight / 2;
+
+            Logger.Log($"AISetHeight: target height={targetHeight}, area=({startX},{startY}) {areaWidth}x{areaHeight}, center=({centerX},{centerY})");
+
             for (int level = 0; level < targetHeight; level++)
             {
                 int shrink = level;
-                int w = Math.Max(3, areaWidth - shrink * 2 + 2);
-                int h = Math.Max(3, areaHeight - shrink * 2 + 2);
+                int effectiveWidth = Math.Max(1, areaWidth - shrink * 2);
+                int effectiveHeight = Math.Max(1, areaHeight - shrink * 2);
+                int brushW = effectiveWidth + 2;
+                int brushH = effectiveHeight + 2;
 
-                // Reconfigure brush size and origin for this level's area
-                // We need to use reflection or a workaround since BrushSize/OriginCell are readonly
-                // Instead, create a new instance for each level
-                int centerX = startX + areaWidth / 2;
-                int centerY = startY + areaHeight / 2;
-                
-                var levelMutation = new RaiseGroundMutation(
+                var centerCell = Map.GetTile(centerX, centerY);
+                Logger.Log($"  Level {level}->{level + 1}: brush={brushW}x{brushH}, centerCell.Level={centerCell?.Level}");
+
+                var mutation = new FSRaiseGroundMutation(
                     MutationTarget,
                     new Point2D(centerX, centerY),
-                    new BrushSize(w, h));
-                
-                levelMutation.Perform();
+                    new BrushSize(brushW, brushH));
+
+                mutation.Perform();
+
+                // Log a sample of cell heights after this pass
+                var afterCell = Map.GetTile(centerX, centerY);
+                var edgeCell = Map.GetTile(startX, startY);
+                Logger.Log($"  After: center.Level={afterCell?.Level}, edge.Level={edgeCell?.Level}");
             }
 
             MutationTarget.InvalidateMap();
