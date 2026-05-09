@@ -70,7 +70,23 @@ namespace TSMapEditor.AI.Operations
                         tileSet.SetName.Contains("Green") || tileSet.SetName.Contains("Pave") ||
                         tileSet.SetName.Contains("Dirt"))
                     {
-                        usableTileSets.Add($"  - \"{tileSet.SetName}\" (ID={i}, 包含 {tileSet.TilesInSet} 个瓦片)");
+                        // Annotate the role of each tileset
+                        string role;
+                        string name = tileSet.SetName;
+                        if (name.IndexOf("Cliff", StringComparison.OrdinalIgnoreCase) >= 0)
+                            role = "悬崖/岩壁，禁止用作基础地形";
+                        else if (name.IndexOf("Ramp", StringComparison.OrdinalIgnoreCase) >= 0)
+                            role = "坡道过渡";
+                        else if (name.IndexOf("Water", StringComparison.OrdinalIgnoreCase) >= 0)
+                            role = "水域";
+                        else if (name.Equals("Clear", StringComparison.OrdinalIgnoreCase))
+                            role = "★ 标准平地/草地 — 创建地图时必须首先用此铺满全图";
+                        else if (name.Contains("Road"))
+                            role = "道路";
+                        else
+                            role = "装饰地形";
+
+                        usableTileSets.Add($"  - \"{tileSet.SetName}\" (ID={i}) — {role}");
                     }
                 }
             }
@@ -79,7 +95,7 @@ namespace TSMapEditor.AI.Operations
                 sb.AppendLine(ts);
 
             sb.AppendLine();
-            sb.AppendLine("注意: TileSetName 必须完全匹配上面列出的名称（区分大小写）。");
+            sb.AppendLine("注意: TileSetName 必须完全匹配上面列出的名称（区分大小写）。创建地图时第一个操作必须使用 \"Clear\"。");
             sb.AppendLine();
         }
 
