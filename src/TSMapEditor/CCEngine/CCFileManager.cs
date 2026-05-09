@@ -322,50 +322,59 @@ namespace TSMapEditor.CCEngine
                     break;
             }
         }
-
         /// <summary>
-        /// Auto-extracts the Mental Omega complete rules file from expandmo99.mix
-        /// if it doesn't already exist on disk. MO's rules are stored as an unnamed
-        /// entry (hash 0xE8DF0937) inside expandmo99.mix and cannot be loaded by
-        /// filename alone, so we extract it once and save it as rulesmo.ini.
+        /// Auto-extracts Mental Omega control files from expandmo99.mix
+        /// if they don't already exist on disk. MO stores these as unnamed
+        /// entries that cannot be loaded by filename, so we extract them once.
         /// </summary>
         private void ExtractMORulesIfNeeded()
         {
-            const string moRulesFileName = "rulesmo.ini";
-            const uint moRulesHashId = 0xE8DF0937;
-            const string moRulesSignature = "Mental Omega";
+            // MO control files: (outputName, hashId, headerSignature)
+            var moFiles = new[]
+            {
+                ("rulesmo.ini",  0xE8DF0937u, "RULES CONTROL FILE"),
+                ("artmo.ini",    0x062DC483u, "ART CONTROL FILE"),
+                ("aimo.ini",     0x66BF0E67u, "AI CONTROL FILE"),
+            };
 
-            // Check if the file already exists on disk in any search directory
-            if (FindFileFromDirectories(moRulesFileName) != null)
+            foreach (var (fileName, hashId, signature) in moFiles)
+            {
+                ExtractMOFileIfNeeded(fileName, hashId, signature);
+            }
+        }
+
+        private void ExtractMOFileIfNeeded(string fileName, uint hashId, string signature)
+        {
+            // Skip if file already exists on disk
+            if (FindFileFromDirectories(fileName) != null)
                 return;
 
             // Try to find the entry by hash ID in loaded MIX files
-            if (!fileLocationInfos.TryGetValue(moRulesHashId, out FileLocationInfo info))
-                return; // expandmo99.mix not loaded or entry not found — not an MO installation
+            if (!fileLocationInfos.TryGetValue(hashId, out FileLocationInfo info))
+                return;
 
-            // Extract the data
             var data = info.MixFile.GetSingleFileData(info.Offset, info.Size);
             if (data == null || data.Length < 100)
                 return;
 
-            // Verify this is actually the MO rules file by checking its header signature
+            // Verify header signature
             string header = System.Text.Encoding.ASCII.GetString(data, 0, Math.Min(200, data.Length));
-            if (!header.Contains(moRulesSignature))
+            if (!header.Contains(signature))
             {
-                Logger.Log($"ExtractMORules: Entry 0x{moRulesHashId:X8} found but does not contain expected MO rules signature. Skipping.");
+                Logger.Log($"ExtractMO: Entry 0x{hashId:X8} does not match expected signature '{signature}'. Skipping.");
                 return;
             }
 
             // Save to editor's own directory (never modify the game directory)
-            string outputPath = Path.Combine(Environment.CurrentDirectory, moRulesFileName);
+            string outputPath = Path.Combine(Environment.CurrentDirectory, fileName);
             try
             {
                 File.WriteAllBytes(outputPath, data);
-                Logger.Log($"ExtractMORules: Auto-extracted {moRulesFileName} ({data.Length} bytes) to {outputPath}");
+                Logger.Log($"ExtractMO: Auto-extracted {fileName} ({data.Length} bytes)");
             }
             catch (Exception ex)
             {
-                Logger.Log($"ExtractMORules: Failed to save {moRulesFileName}: {ex.Message}");
+                Logger.Log($"ExtractMO: Failed to save {fileName}: {ex.Message}");
             }
         }
     }
