@@ -7,15 +7,23 @@ using TSMapEditor.UI;
 namespace TSMapEditor.Mutations.Classes
 {
     /// <summary>
-    /// A mutation that raises ground in a rectangular area to a target height level.
-    /// Uses FSRaiseGroundMutation (non-steep, same as the editor's default toolbar button)
-    /// with a large BrushSize to cover the entire target area.
+    /// A mutation that raises ground in a rectangular area by N levels.
+    /// Uses FSRaiseGroundMutation (non-steep, same as the editor's default 
+    /// toolbar "Raise Ground" button) with a large BrushSize.
+    /// 
+    /// Key insight: each call to FSRaiseGroundMutation.Perform() calls RaiseGround()
+    /// which raises ALL cells at the origin's level by 1, then Process() places ramps.
+    /// We call it N times with the SAME brush size (no gradient shrinking).
+    /// Process() handles the border ramps automatically each time.
+    /// 
+    /// DO NOT shrink the brush between levels - that creates ramp tiles from earlier
+    /// passes that don't get updated by later passes, causing black cliff borders.
     /// </summary>
     public class AISetHeightMutation : FSRaiseGroundMutation
     {
         public AISetHeightMutation(IMutationTarget mutationTarget,
             int startX, int startY, int width, int height,
-            byte targetHeight, string description)
+            byte raiseBy, string description)
             : base(mutationTarget,
                    new Point2D(startX + width / 2, startY + height / 2),
                    new BrushSize(width + 2, height + 2))
@@ -24,7 +32,7 @@ namespace TSMapEditor.Mutations.Classes
             this.startY = startY;
             this.areaWidth = width;
             this.areaHeight = height;
-            this.targetHeight = targetHeight;
+            this.raiseBy = raiseBy;
             this.displayDescription = description;
         }
 
@@ -32,13 +40,13 @@ namespace TSMapEditor.Mutations.Classes
         private readonly int startY;
         private readonly int areaWidth;
         private readonly int areaHeight;
-        private readonly byte targetHeight;
+        private readonly byte raiseBy;
         private readonly string displayDescription;
 
         public override string GetDisplayString()
         {
             return string.IsNullOrEmpty(displayDescription)
-                ? $"AI: Set height to {targetHeight} at ({startX},{startY}) {areaWidth}x{areaHeight}"
+                ? $"AI: Raise height by {raiseBy} at ({startX},{startY}) {areaWidth}x{areaHeight}"
                 : $"AI: {displayDescription}";
         }
 
@@ -46,20 +54,21 @@ namespace TSMapEditor.Mutations.Classes
         {
             int centerX = startX + areaWidth / 2;
             int centerY = startY + areaHeight / 2;
+            // Fixed brush size for all passes - DO NOT shrink between levels
+            int brushW = areaWidth + 2;
+            int brushH = areaHeight + 2;
 
-            Logger.Log($"AISetHeight: target height={targetHeight}, area=({startX},{startY}) {areaWidth}x{areaHeight}, center=({centerX},{centerY})");
+            var centerCell = Map.GetTile(centerX, centerY);
+            if (centerCell == null) return;
 
-            for (int level = 0; level < targetHeight; level++)
+            Logger.Log($"AISetHeight: raiseBy={raiseBy}, area=({startX},{startY}) {areaWidth}x{areaHeight}, " +
+                       $"center=({centerX},{centerY}), baseHeight={centerCell.Level}, brush={brushW}x{brushH}");
+
+            // Each call raises ALL cells at origin's level by 1, then fixes ramps.
+            // Using the SAME brush size each time ensures each pass's Process() 
+            // re-evaluates the SAME border cells, keeping ramps consistent.
+            for (int i = 0; i < raiseBy; i++)
             {
-                int shrink = level;
-                int effectiveWidth = Math.Max(1, areaWidth - shrink * 2);
-                int effectiveHeight = Math.Max(1, areaHeight - shrink * 2);
-                int brushW = effectiveWidth + 2;
-                int brushH = effectiveHeight + 2;
-
-                var centerCell = Map.GetTile(centerX, centerY);
-                Logger.Log($"  Level {level}->{level + 1}: brush={brushW}x{brushH}, centerCell.Level={centerCell?.Level}");
-
                 var mutation = new FSRaiseGroundMutation(
                     MutationTarget,
                     new Point2D(centerX, centerY),
@@ -67,10 +76,8 @@ namespace TSMapEditor.Mutations.Classes
 
                 mutation.Perform();
 
-                // Log a sample of cell heights after this pass
                 var afterCell = Map.GetTile(centerX, centerY);
-                var edgeCell = Map.GetTile(startX, startY);
-                Logger.Log($"  After: center.Level={afterCell?.Level}, edge.Level={edgeCell?.Level}");
+                Logger.Log($"  Pass {i}: center.Level={afterCell?.Level}");
             }
 
             MutationTarget.InvalidateMap();
