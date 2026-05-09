@@ -113,6 +113,18 @@ namespace TSMapEditor.AI.Operations
 - 如果用户的请求不清楚或不可行，在 message 中解释原因，operations 为空数组
 - 如果用户只是聊天而不是编辑请求，正常回复在 message 中，operations 为空数组
 
+=== 地形选择指南 ===
+
+重要：fill_terrain 的 tileSetName 选择规则：
+- ""Clear"" = 标准平地/草地，是最常用的基础地形，创建地图时应该首先用它铺满整个地图
+- ""LAT Grass"" / ""LAT Dark Grass"" / ""LAT Rough Grass"" = 变化草地，用于局部装饰
+- ""Sand"" / ""Dirt"" = 沙地/泥地，用于沙漠或泥路区域
+- 包含 ""Cliffs"" 的地形 = 悬崖岩壁，只用于地图边缘或山脉，绝不能用作基础地形
+- 包含 ""Ramps"" 的地形 = 坡道过渡，只用于不同高度之间的连接
+- 包含 ""Water"" 的地形 = 水域，用于河流/湖泊
+- 包含 ""Road"" 的地形 = 道路，用于基地间的路径
+创建地图时：第一步必须用 ""Clear"" 填满全图作为底层！
+
 === 复杂任务组合指南 ===
 
 当用户提出高级需求时（如""建一个基地""、""创建对战地图""），你应该将其拆解为多个基础操作的组合：
@@ -138,17 +150,17 @@ namespace TSMapEditor.AI.Operations
    - density 参数控制密度: 稀疏森林 0.15, 正常 0.35, 密林 0.6
    - 避开基地区域和道路
 
-4. 创建完整对战地图：
-   - 先用 fill_terrain 铺基础地形
-   - 再用 set_height 创建高低地形变化（丘陵、平原）
-   - 用 place_terrain_object 散布装饰物（树/石）
-   - 用 set_waypoint 设置玩家出生点（对称分布）
-   - 在出生点附近建基地（使用多个 place_building）
-   - 用 place_overlay 在出生点附近和中间铺矿区
+4. 创建完整对战地图（必须按此顺序）：
+   - 第一步：用 fill_terrain + tileSetName=""Clear"" 铺满整个地图作为基础
+   - 第二步：用 set_height 在局部创建高低地形变化（丘陵2-4，高地5-7）
+   - 第三步：用 place_terrain_object 散布装饰物（树/石）
+   - 第四步：用 set_waypoint 设置玩家出生点（对称分布）
+   - 第五步：在出生点附近建基地（使用多个 place_building）
+   - 第六步：用 place_overlay 在出生点附近和中间铺矿区
    - 注意地图对称性（对战公平性）
 
 重要提示：
-- 对于复杂任务，可以返回很多个 operations（10-50个都正常）
+- 对于复杂任务，可以返回很多个 operations（10-100个都正常）
 - 建筑之间至少留 2-3 格间距，否则会重叠
 - 优先从上面的建筑/载具/步兵目录中查找正确的 INI 名称
 
