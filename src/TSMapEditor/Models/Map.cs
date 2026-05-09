@@ -406,6 +406,7 @@ namespace TSMapEditor.Models
             MapWriter.WriteTubes(this, LoadedINI);
 
             MapWriter.WriteWaypoints(this, LoadedINI);
+            MapWriter.WriteHeader(this, LoadedINI);
             MapWriter.WriteTaskForces(this, LoadedINI);
             MapWriter.WriteTriggers(this, LoadedINI);
             MapWriter.WriteTags(this, LoadedINI);

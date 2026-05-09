@@ -178,8 +178,14 @@ namespace TSMapEditor.AI.Operations
   set_height 在地图中央创建高地（高度1-2，区域至少10x10）
   ★ set_height 必须在所有 fill_terrain 操作之后执行，否则坡道贴图会被覆盖导致黑边！
 
-第四步 - 设置出生点：
-  set_waypoint 设置对称的出生点（四角或对角分布）
+第四步 - 设置出生点（★★ 极其重要！必须为每个玩家放一个 ★★）：
+  4人图必须放 4 个 set_waypoint（waypointIndex 分别为 0, 1, 2, 3）
+  2人图必须放 2 个 set_waypoint（waypointIndex 分别为 0, 1）
+  示例：4人图四角出生点，地图100x100时：
+    set_waypoint: waypointIndex=0, x=20, y=20  (左上)
+    set_waypoint: waypointIndex=1, x=80, y=20  (右上)
+    set_waypoint: waypointIndex=2, x=20, y=80  (左下)
+    set_waypoint: waypointIndex=3, x=80, y=80  (右下)
 
 第五步 - 铺起始矿区（每个出生点一个）：
   a. place_overlay 铺 8x8 的 TIB01 矿石（距出生点 10-15 格）

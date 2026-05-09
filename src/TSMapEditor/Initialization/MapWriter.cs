@@ -1,4 +1,4 @@
-﻿using CNCMaps.FileFormats.Encodings;
+using CNCMaps.FileFormats.Encodings;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Rampastring.Tools;
@@ -214,6 +214,33 @@ namespace TSMapEditor.Initialization
             mapIni.AddSection(section);
 
             map.Waypoints.ForEach(w => w.WriteToIniFile(mapIni));
+        }
+
+        /// <summary>
+        /// Writes the [Header] section for CnCNet/MO client compatibility.
+        /// Only generated for skirmish/multiplayer maps (no Player set in Basic).
+        /// Counts player spawn waypoints (0-7) and sets NumberStartingPoints.
+        /// </summary>
+        public static void WriteHeader(IMap map, IniFile mapIni)
+        {
+            const string sectionName = "Header";
+
+            // Only generate for multiplayer/skirmish maps
+            // Campaign maps have Basic.Player set (e.g. "Americans")
+            if (!string.IsNullOrWhiteSpace(map.Basic.Player))
+                return;
+
+            mapIni.RemoveSection(sectionName);
+
+            // Count spawn point waypoints (indices 0-7)
+            int startingPoints = map.Waypoints.Count(wp => wp.Identifier >= 0 && wp.Identifier <= 7);
+
+            if (startingPoints <= 0)
+                return;
+
+            var section = new IniSection(sectionName);
+            mapIni.AddSection(section);
+            section.SetStringValue("NumberStartingPoints", startingPoints.ToString(CultureInfo.InvariantCulture));
         }
 
         public static void WriteTaskForces(IMap map, IniFile mapIni) => WriteTaskForces(map.TaskForces, mapIni);
