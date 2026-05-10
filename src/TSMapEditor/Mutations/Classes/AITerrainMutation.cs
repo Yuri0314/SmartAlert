@@ -121,6 +121,11 @@ namespace TSMapEditor.Mutations.Classes
 
             undoTerrainData = originalTerrainData.ToArray();
 
+            if (MutationTarget.AutoLATEnabled)
+            {
+                ApplyGenericAutoLAT(startX, startY, startX + width, startY + height);
+            }
+
             MutationTarget.InvalidateMap();
         }
 

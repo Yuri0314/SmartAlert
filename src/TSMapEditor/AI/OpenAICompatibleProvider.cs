@@ -23,7 +23,7 @@ namespace TSMapEditor.AI
         {
             this.config = config ?? throw new ArgumentNullException(nameof(config));
             httpClient = new HttpClient();
-            httpClient.Timeout = TimeSpan.FromSeconds(120);
+            httpClient.Timeout = TimeSpan.FromSeconds(300);
         }
 
         public async Task<string> ChatAsync(string systemPrompt, List<ChatMessage> history, CancellationToken cancellationToken = default)

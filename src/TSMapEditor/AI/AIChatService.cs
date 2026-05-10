@@ -262,7 +262,7 @@ namespace TSMapEditor.AI
             IsBusy = true;
             BusyStateChanged?.Invoke(this, true);
 
-            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(300));
 
             Task.Run(async () =>
             {
@@ -294,7 +294,7 @@ namespace TSMapEditor.AI
                 }
                 catch (OperationCanceledException)
                 {
-                    ErrorOccurred?.Invoke(this, "AI 请求超时（120秒）。请检查网络连接。");
+                    ErrorOccurred?.Invoke(this, "AI 请求超时（300秒）。请检查网络连接。");
                     IsBusy = false;
                     BusyStateChanged?.Invoke(this, false);
                 }

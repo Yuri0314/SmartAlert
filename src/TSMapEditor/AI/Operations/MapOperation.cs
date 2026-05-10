@@ -22,6 +22,16 @@ namespace TSMapEditor.AI.Operations
         public int Y { get; set; }
 
         /// <summary>
+        /// End X coordinate for line/path drawing operations.
+        /// </summary>
+        public int EndX { get; set; }
+
+        /// <summary>
+        /// End Y coordinate for line/path drawing operations.
+        /// </summary>
+        public int EndY { get; set; }
+
+        /// <summary>
         /// Width of the target area in cells.
         /// </summary>
         public int Width { get; set; } = 1;

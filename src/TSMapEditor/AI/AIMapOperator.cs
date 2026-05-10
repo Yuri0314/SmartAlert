@@ -125,8 +125,9 @@ namespace TSMapEditor.AI
 
         private string ExecuteOperation(MapOperation op)
         {
-            // Auto-clamp coordinates to valid diamond area (except fill_terrain which handles areas)
-            if (op.Type?.ToLowerInvariant() != "fill_terrain" && !IsInDiamond(op.X, op.Y))
+            // Auto-clamp coordinates to valid diamond area (except fill_terrain and draw_path which handle areas/endpoints internally)
+            string opType = op.Type?.ToLowerInvariant();
+            if (opType != "fill_terrain" && opType != "draw_path" && !IsInDiamond(op.X, op.Y))
             {
                 var clamped = ClampToDiamond(op.X, op.Y);
                 Logger.Log($"AI coord clamp: {op.Type} ({op.X},{op.Y}) -> ({clamped.X},{clamped.Y})");
@@ -138,6 +139,8 @@ namespace TSMapEditor.AI
             {
                 case "fill_terrain":
                     return ExecuteFillTerrain(op);
+                case "draw_path":
+                    return ExecuteDrawPath(op);
                 case "place_building":
                     return ExecutePlaceObject(op, AIPlaceObjectType.Building);
                 case "place_unit":
@@ -203,6 +206,30 @@ namespace TSMapEditor.AI
             mutationManager.PerformMutation(mutation);
 
             return $"✓ 已填充 {op.TileSetName} 在 ({startX},{startY}) 区域 {actualWidth}x{actualHeight}";
+        }
+
+        private string ExecuteDrawPath(MapOperation op)
+        {
+            // Auto-clamp endpoints
+            var start = IsInDiamond(op.X, op.Y) ? new Point2D(op.X, op.Y) : ClampToDiamond(op.X, op.Y);
+            var end = IsInDiamond(op.EndX, op.EndY) ? new Point2D(op.EndX, op.EndY) : ClampToDiamond(op.EndX, op.EndY);
+            
+            Logger.Log($"AI draw_path: {op.TileSetName} original=({op.X},{op.Y})->({op.EndX},{op.EndY}) clamped=({start.X},{start.Y})->({end.X},{end.Y}) width={op.Width}");
+            
+            int tileIndex = FindTileIndexByName(op.TileSetName);
+            if (tileIndex < 0)
+                return $"找不到地形类型: \"{op.TileSetName}\"";
+
+            bool isWater = op.TileSetName.IndexOf("Water", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            var mutation = new AIDrawPathMutation(mutationTarget, start.X, start.Y, end.X, end.Y,
+                op.Width, tileIndex,
+                op.Description ?? $"绘制 {op.TileSetName} 从 ({start.X},{start.Y}) 到 ({end.X},{end.Y})",
+                flattenHeight: isWater, targetHeight: 0);
+
+            mutationManager.PerformMutation(mutation);
+
+            return $"✓ 已绘制 {op.TileSetName} 路径从 ({start.X},{start.Y}) 到 ({end.X},{end.Y}) 宽度 {op.Width}";
         }
 
         private string ExecutePlaceObject(MapOperation op, AIPlaceObjectType objectType)

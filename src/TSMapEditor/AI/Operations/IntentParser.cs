@@ -106,9 +106,22 @@ namespace TSMapEditor.AI.Operations
   ""waypointIndex"": 路标编号 (0=玩家1出生点, 1=玩家2出生点, ...7=玩家8出生点)
 }}
 
+10. draw_path — 绘制线状地形路径（如公路、河流、沙路）：
+{{
+  ""type"": ""draw_path"",
+  ""x"": 起点X坐标, ""y"": 起点Y坐标,
+  ""endX"": 终点X坐标, ""endY"": 终点Y坐标,
+  ""width"": 路径宽度,
+  ""tileSetName"": ""地形类型名称（如 LAT Pavement, Water, Grass DirtRoads）""
+}}
+
 规则：
 - 坐标不能超出地图范围
 - tileSetName 必须是上面列出的可用地形类型的精确名称
+- ★ draw_path 宽度指南：
+  - 公路/土路(LAT Pavement/Grass DirtRoads): width = 2~4
+  - ★★★ 河流(Water): width 必须 >= 8！推荐 8~12。宽度太小(如5以下)会被岸边过渡纹理完全覆盖，看不到水面！
+- ★ 地理骨架 (Macro Structure)：如果用户要求创建对战地图，必须用 `draw_path` 规划道路网（LAT Pavement 或 Grass DirtRoads）连接各个出生点和地图中央！也可以用它画河流（Water）来分割战场。
 - objectName 使用游戏内部的 INI 名称。系统支持模糊匹配，不确定时填最可能的名称
 - owner 规则（★★★极其重要★★★）：
   对战地图中，玩家拥有的单位/建筑 owner 必须用 ""Multi1""~""Multi8""
@@ -357,6 +370,12 @@ RA2/YR 使用等距(isometric)地图，有效区域是菱形而不是矩形！
 
                         if (opElement.TryGetProperty("y", out var yProp))
                             op.Y = yProp.GetInt32();
+
+                        if (opElement.TryGetProperty("endX", out var exProp))
+                            op.EndX = exProp.GetInt32();
+
+                        if (opElement.TryGetProperty("endY", out var eyProp))
+                            op.EndY = eyProp.GetInt32();
 
                         if (opElement.TryGetProperty("width", out var wProp))
                             op.Width = wProp.GetInt32();
