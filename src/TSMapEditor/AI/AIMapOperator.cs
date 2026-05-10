@@ -503,26 +503,39 @@ namespace TSMapEditor.AI
         }
 
         // Common alias mappings: AI often uses these names instead of the exact house INI names
+        // For skirmish maps, Player/faction names map to Multi1-Multi8
         private static readonly Dictionary<string, string[]> OwnerAliases = new(StringComparer.OrdinalIgnoreCase)
         {
-            { "Soviet",      new[] { "Russians", "Soviet", "苏联", "苏维埃" } },
-            { "Russians",    new[] { "Russians", "Soviet", "苏联", "苏维埃" } },
-            { "苏联",        new[] { "Russians", "Soviet" } },
-            { "Allied",      new[] { "Americans", "Allied", "盟军" } },
-            { "Americans",   new[] { "Americans", "Allied", "盟军" } },
-            { "盟军",        new[] { "Americans", "Allied" } },
-            { "Yuri",        new[] { "YuriCountry", "Yuri", "尤里" } },
-            { "YuriCountry", new[] { "YuriCountry", "Yuri", "尤里" } },
-            { "尤里",        new[] { "YuriCountry", "Yuri" } },
-            { "Foehn",       new[] { "Foehn", "焚风" } },
-            { "焚风",        new[] { "Foehn" } },
-            { "Epsilon",     new[] { "Epsilon", "心灵军团", "厄普西隆" } },
-            { "心灵军团",    new[] { "Epsilon" } },
-            { "GDI",         new[] { "Americans", "Allied" } },
-            { "Nod",         new[] { "Russians", "Soviet" } },
-            { "Confederate", new[] { "Americans", "Allied" } },
-            { "Russia",      new[] { "Russians" } },
-            { "America",     new[] { "Americans" } },
+            // Player/Multi mappings (critical for skirmish maps)
+            { "Player1",     new[] { "Multi1" } },
+            { "Player2",     new[] { "Multi2" } },
+            { "Player3",     new[] { "Multi3" } },
+            { "Player4",     new[] { "Multi4" } },
+            { "Player5",     new[] { "Multi5" } },
+            { "Player6",     new[] { "Multi6" } },
+            { "Player7",     new[] { "Multi7" } },
+            { "Player8",     new[] { "Multi8" } },
+            { "玩家1",       new[] { "Multi1" } },
+            { "玩家2",       new[] { "Multi2" } },
+            { "玩家3",       new[] { "Multi3" } },
+            { "玩家4",       new[] { "Multi4" } },
+            { "Boss",        new[] { "Multi4", "Multi8" } },
+            { "boss方",      new[] { "Multi4", "Multi8" } },
+            // Faction aliases → try Multi first, then faction name
+            { "Soviet",      new[] { "Multi1", "Russians" } },
+            { "Russians",    new[] { "Multi1", "Russians" } },
+            { "苏联",        new[] { "Multi1", "Russians" } },
+            { "USSR",        new[] { "Multi1", "Russians" } },
+            { "Allied",      new[] { "Multi1", "Americans" } },
+            { "Americans",   new[] { "Multi1", "Americans" } },
+            { "盟军",        new[] { "Multi1", "Americans" } },
+            { "Yuri",        new[] { "Multi1", "YuriCountry" } },
+            { "YuriCountry", new[] { "Multi1", "YuriCountry" } },
+            { "尤里",        new[] { "Multi1", "YuriCountry" } },
+            { "Foehn",       new[] { "Multi1", "Foehn" } },
+            { "焚风",        new[] { "Multi1", "Foehn" } },
+            { "Epsilon",     new[] { "Multi1", "Epsilon" } },
+            { "心灵军团",    new[] { "Multi1", "Epsilon" } },
         };
 
         private House ResolveOwner(string ownerName)

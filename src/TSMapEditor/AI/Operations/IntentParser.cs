@@ -110,7 +110,14 @@ namespace TSMapEditor.AI.Operations
 - 坐标不能超出地图范围
 - tileSetName 必须是上面列出的可用地形类型的精确名称
 - objectName 使用游戏内部的 INI 名称。系统支持模糊匹配，不确定时填最可能的名称
-- owner 使用地图中已定义的所属方名称。如果不指定，默认使用 Neutral
+- owner 规则（★★★极其重要★★★）：
+  对战地图中，玩家拥有的单位/建筑 owner 必须用 ""Multi1""~""Multi8""
+  - Multi1 = waypoint 0 的玩家（第1位玩家）
+  - Multi2 = waypoint 1 的玩家（第2位玩家）
+  - Multi3 = waypoint 2 的玩家（第3位玩家）
+  - Multi4 = waypoint 3 的玩家（第4位玩家）
+  中立建筑（石油井等）仍用 ""Neutral""
+  ★ 不要用 USSR/Americans 等阵营名！那些在对战模式中无效！
 - 如果用户的请求不清楚或不可行，在 message 中解释原因，operations 为空数组
 - 如果用户只是聊天而不是编辑请求，正常回复在 message 中，operations 为空数组
 
