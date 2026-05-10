@@ -25,7 +25,8 @@ namespace TSMapEditor.AI.Operations
 {mapContext}
 
 你必须以 JSON 格式回复，包含两个字段：
-1. ""message"": 给用户的简短说明（中文）
+1. ""message"": 给用户的简短说明（中文），★★ 创建地图时第一行必须写 ""地图名称: XXX""（给地图起一个有创意的英文名）
+   例如: ""地图名称: Emerald Valley\n已为您创建一张2v2对战地图...""
 2. ""operations"": 操作指令数组
 
 支持的操作类型和格式：
@@ -221,28 +222,36 @@ RA2/YR 使用等距(isometric)地图，有效区域是菱形而不是矩形！
 
 第五步 - 铺起始矿区（每个出生点一个）：
   a. place_overlay 铺 8x8 的 TIB01 矿石（距出生点 10-15 格）
-  b. place_terrain_object 在矿区中心放 TIBTRE01 矿脉（1个即可）
-  ★ 没有 TIBTRE01 矿脉，矿石采完就没了！
+  b. place_terrain_object 在矿区放 2-3 个矿脉，混用 TIBTRE01、TIBTRE02、TIBTRE03
+  ★ 没有矿脉矿石采完就没了！每个矿区至少 1 个 TIBTRE
 
 第六步 - 铺扩张矿区（地图中部 2-4 个）：
   a. place_overlay 铺 6x6 的 TIB01 或 GEM01
-  b. place_terrain_object 在每个矿区中心放 TIBTRE01 矿脉
+  b. place_terrain_object 在每个矿区放 1-2 个 TIBTRE01/TIBTRE02/TIBTRE03 矿脉
 
 第七步 - 放置中立建筑（owner=""Neutral""）：
-  - 石油井(CAOILD): 对称放在地图中间区域，2-4个
-  - 装饰建筑（增加地图细节感，每种 2-4 个，分散放置）：
+  可捕获科技建筑（放在争夺区，影响战局）：
+    石油井: CAOILD x4-8（对称放在地图四条边的中点）
+    机场: CAAIRP x1-2（地图中央争夺点）
+    医院: CAFHOSP x1-2
+  装饰性民居建筑（营造生活氛围，每种 2-6 个）：
+    民房: CABUNK01 / CABUNK03 （小房子，分散在路边）
     商店: CASTOR / CASTOR02
+    城堡残垣: CASTL03（装饰性废墟）
+    工厂: CASLAB（工业区）
     公园: CAPARK01 / CAPARK04
     木屋: CAWOODS
     风车: CAWIND
     水塔: CABUBB
-    路灯: CASOLR
 
-第八步 - 散布树林：
-  place_terrain_object 放 4-6 簇小树林
-  每簇 12x12，density=0.12
-  放在地图边缘和战场分隔区域
-  避开出生点 25 格范围和矿区 5 格范围
+第八步 - 散布树林（★★ 数量要多，官方地图通常有 300-500 棵树 ★★）：
+  温带地图必须用 TREE20-TREE28（大型温带树），不要用 TREE01-TREE06（那是灰色小灌木）
+  树种要混用：随机选择 TREE20/TREE21/TREE22/TREE23/TREE24/TREE25/TREE26/TREE27/TREE28
+  铺设规则：
+    - 8-12 簇树林，每簇 15x15-20x20，density=0.15-0.25
+    - 地图边缘大量放（营造自然边界）
+    - 出生点之间放（形成自然通道和视觉分隔）
+    - 避开出生点 20 格范围和矿区 5 格范围
 
 === set_height 使用规则 ===
 - 高度范围 1-2（不要太高，系统会自动生成坡道过渡）
