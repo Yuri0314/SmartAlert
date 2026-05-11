@@ -12,7 +12,8 @@ namespace TSMapEditor.AI
 {
     /// <summary>
     /// AI provider that works with any OpenAI-compatible API.
-    /// Supports: Alibaba Bailian (DashScope), Xiaomi MIMO, DeepSeek, Ollama, OpenAI, etc.
+    /// Supports function calling (tool use) for the Agent architecture.
+    /// Compatible with: Alibaba Bailian (DashScope), DeepSeek, Ollama, OpenAI, etc.
     /// </summary>
     public class OpenAICompatibleProvider : IAIProvider
     {
@@ -26,7 +27,20 @@ namespace TSMapEditor.AI
             httpClient.Timeout = TimeSpan.FromSeconds(300);
         }
 
+        /// <summary>
+        /// Simple text-only chat (no tools). Backward compatible.
+        /// </summary>
         public async Task<string> ChatAsync(string systemPrompt, List<ChatMessage> history, CancellationToken cancellationToken = default)
+        {
+            var response = await ChatWithToolsAsync(systemPrompt, history, null, cancellationToken);
+            return response.TextContent ?? "";
+        }
+
+        /// <summary>
+        /// Chat with optional tool definitions. Returns structured response with text or tool calls.
+        /// </summary>
+        public async Task<ChatResponse> ChatWithToolsAsync(string systemPrompt, List<ChatMessage> history,
+            List<ToolDefinition> tools, CancellationToken cancellationToken = default)
         {
             if (!config.IsConfigured)
                 throw new InvalidOperationException("AI service is not configured. Please set API endpoint, key, and model name in settings.");
@@ -36,23 +50,69 @@ namespace TSMapEditor.AI
                 endpoint += "/chat/completions";
 
             // Build messages array
-            var messages = new List<RequestMessage>();
-            messages.Add(new RequestMessage { Role = "system", Content = systemPrompt });
+            var messages = new List<object>();
+            messages.Add(new { role = "system", content = systemPrompt });
 
             foreach (var msg in history)
             {
-                messages.Add(new RequestMessage { Role = msg.Role, Content = msg.Content });
+                if (msg.Role == "tool")
+                {
+                    // Tool result message
+                    messages.Add(new { role = "tool", content = msg.Content, tool_call_id = msg.ToolCallId });
+                }
+                else if (msg.Role == "assistant" && msg.ToolCalls != null && msg.ToolCalls.Count > 0)
+                {
+                    // Assistant message with tool calls
+                    var toolCalls = new List<object>();
+                    foreach (var tc in msg.ToolCalls)
+                    {
+                        toolCalls.Add(new
+                        {
+                            id = tc.Id,
+                            type = "function",
+                            function = new { name = tc.FunctionName, arguments = tc.Arguments }
+                        });
+                    }
+                    messages.Add(new { role = "assistant", content = msg.Content, tool_calls = toolCalls });
+                }
+                else
+                {
+                    // Regular user/assistant message
+                    messages.Add(new { role = msg.Role, content = msg.Content });
+                }
             }
 
-            var requestBody = new RequestBody
+            // Build request body
+            var requestObj = new Dictionary<string, object>
             {
-                Model = config.ModelName,
-                Messages = messages,
-                Temperature = 0.7
+                ["model"] = config.ModelName,
+                ["messages"] = messages,
+                ["temperature"] = 0.7,
+                ["max_tokens"] = 16384
             };
 
-            string jsonBody = JsonSerializer.Serialize(requestBody);
-            Logger.Log($"AI Request to {endpoint}, model={config.ModelName}, messages={messages.Count}");
+            // Add tools if provided
+            if (tools != null && tools.Count > 0)
+            {
+                var toolDefs = new List<object>();
+                foreach (var tool in tools)
+                {
+                    toolDefs.Add(new
+                    {
+                        type = "function",
+                        function = new
+                        {
+                            name = tool.Name,
+                            description = tool.Description,
+                            parameters = tool.Parameters
+                        }
+                    });
+                }
+                requestObj["tools"] = toolDefs;
+            }
+
+            string jsonBody = JsonSerializer.Serialize(requestObj);
+            Logger.Log($"AI Request to {endpoint}, model={config.ModelName}, messages={messages.Count}, tools={tools?.Count ?? 0}");
 
             var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
             request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
@@ -67,66 +127,59 @@ namespace TSMapEditor.AI
                 throw new HttpRequestException($"AI API returned {(int)response.StatusCode}: {responseBody}");
             }
 
+            return ParseResponse(responseBody);
+        }
+
+        private ChatResponse ParseResponse(string responseBody)
+        {
             try
             {
-                var responseObj = JsonSerializer.Deserialize<ResponseBody>(responseBody);
-                string content = responseObj?.Choices?[0]?.Message?.Content;
+                using var doc = JsonDocument.Parse(responseBody);
+                var root = doc.RootElement;
+                var choice = root.GetProperty("choices")[0];
+                var message = choice.GetProperty("message");
 
-                if (string.IsNullOrEmpty(content))
-                    throw new InvalidOperationException("AI returned an empty response.");
+                var result = new ChatResponse();
 
-                Logger.Log($"AI Response received, length={content.Length}");
-                return content;
+                // Check for tool_calls
+                if (message.TryGetProperty("tool_calls", out var toolCallsElement) &&
+                    toolCallsElement.ValueKind == JsonValueKind.Array &&
+                    toolCallsElement.GetArrayLength() > 0)
+                {
+                    result.ToolCalls = new List<ToolCallInfo>();
+                    foreach (var tc in toolCallsElement.EnumerateArray())
+                    {
+                        var func = tc.GetProperty("function");
+                        result.ToolCalls.Add(new ToolCallInfo
+                        {
+                            Id = tc.GetProperty("id").GetString(),
+                            FunctionName = func.GetProperty("name").GetString(),
+                            Arguments = func.GetProperty("arguments").GetString()
+                        });
+                    }
+                    Logger.Log($"AI Response: {result.ToolCalls.Count} tool call(s): {string.Join(", ", result.ToolCalls.ConvertAll(t => t.FunctionName))}");
+                }
+
+                // Get text content (may be null when tool_calls are present)
+                if (message.TryGetProperty("content", out var contentElement) &&
+                    contentElement.ValueKind == JsonValueKind.String)
+                {
+                    result.TextContent = contentElement.GetString();
+                }
+
+                if (!result.HasToolCalls && string.IsNullOrEmpty(result.TextContent))
+                {
+                    throw new InvalidOperationException("AI returned neither text content nor tool calls.");
+                }
+
+                Logger.Log($"AI Response received, text={result.TextContent?.Length ?? 0} chars, toolCalls={result.ToolCalls?.Count ?? 0}");
+                return result;
             }
             catch (JsonException ex)
             {
                 Logger.Log($"Failed to parse AI response: {ex.Message}");
                 throw new InvalidOperationException($"Failed to parse AI response: {responseBody}", ex);
             }
-        }
-
-        // --- Request/Response DTOs ---
-
-        private class RequestBody
-        {
-            [JsonPropertyName("model")]
-            public string Model { get; set; }
-
-            [JsonPropertyName("messages")]
-            public List<RequestMessage> Messages { get; set; }
-
-            [JsonPropertyName("temperature")]
-            public double Temperature { get; set; }
-
-            [JsonPropertyName("max_tokens")]
-            public int MaxTokens { get; set; } = 16384;
-        }
-
-        private class RequestMessage
-        {
-            [JsonPropertyName("role")]
-            public string Role { get; set; }
-
-            [JsonPropertyName("content")]
-            public string Content { get; set; }
-        }
-
-        private class ResponseBody
-        {
-            [JsonPropertyName("choices")]
-            public List<ResponseChoice> Choices { get; set; }
-        }
-
-        private class ResponseChoice
-        {
-            [JsonPropertyName("message")]
-            public ResponseMessage Message { get; set; }
-        }
-
-        private class ResponseMessage
-        {
-            [JsonPropertyName("content")]
-            public string Content { get; set; }
         }
     }
 }

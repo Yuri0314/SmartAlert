@@ -11,12 +11,28 @@ namespace TSMapEditor.AI
     public interface IAIProvider
     {
         /// <summary>
-        /// Sends a chat completion request to the AI service.
+        /// Sends a chat completion request to the AI service (text-only, no tools).
         /// </summary>
-        /// <param name="systemPrompt">The system prompt that guides AI behavior.</param>
-        /// <param name="history">The conversation history.</param>
-        /// <param name="cancellationToken">Token to cancel the request.</param>
-        /// <returns>The AI's response text.</returns>
         Task<string> ChatAsync(string systemPrompt, List<ChatMessage> history, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends a chat completion request with tool definitions.
+        /// The AI may respond with text or tool calls.
+        /// </summary>
+        Task<ChatResponse> ChatWithToolsAsync(string systemPrompt, List<ChatMessage> history, List<ToolDefinition> tools, CancellationToken cancellationToken = default);
+    }
+
+    /// <summary>
+    /// Defines a tool that can be called by the AI.
+    /// Follows the OpenAI function calling format.
+    /// </summary>
+    public class ToolDefinition
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        /// <summary>
+        /// JSON Schema for the tool's parameters, as a pre-built dictionary.
+        /// </summary>
+        public Dictionary<string, object> Parameters { get; set; }
     }
 }

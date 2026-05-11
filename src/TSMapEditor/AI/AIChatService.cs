@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Rampastring.Tools;
-using TSMapEditor.AI.Operations;
-using TSMapEditor.GameMath;
 using TSMapEditor.Models;
 using TSMapEditor.Mutations;
 using TSMapEditor.Rendering;
@@ -14,19 +11,24 @@ using TSMapEditor.UI;
 namespace TSMapEditor.AI
 {
     /// <summary>
-    /// The main AI chat service that coordinates the provider, parser, and map operator.
-    /// Handles the full flow: user message → AI API → parse response → execute operations.
+    /// The main AI chat service with Agent Loop architecture.
     /// 
-    /// Important threading model:
+    /// Flow:
+    /// 1. User sends message → background thread calls LLM with tool definitions
+    /// 2. If LLM returns tool_calls → queue for main thread execution
+    /// 3. Main thread executes tools via ProcessPendingOperations()
+    /// 4. Results fed back to LLM → loop until LLM returns text
+    /// 
+    /// Threading model:
     /// - HTTP calls to AI run on a background thread (Task.Run)
     /// - Map mutations MUST run on the main thread (MonoGame game loop)
-    /// - Pending operations are queued and executed via Update() on the main thread
+    /// - Communication via pendingToolCalls/pendingToolResults queues
     /// </summary>
     public class AIChatService
     {
         private AIConfig config;
         private IAIProvider provider;
-        private AIMapOperator mapOperator;
+        private ToolExecutor toolExecutor;
         private readonly List<ChatMessage> chatHistory = new List<ChatMessage>();
 
         private Map map;
@@ -34,14 +36,26 @@ namespace TSMapEditor.AI
         private MutationManager mutationManager;
         private IMutationTarget mutationTarget;
 
-        // Thread-safe pending operations queue
-        private readonly object pendingLock = new object();
-        private PendingAIResult pendingResult;
+        // Thread-safe communication between background AI thread and main thread
+        private readonly object syncLock = new object();
+        private AgentState agentState = AgentState.Idle;
+        private List<ToolCallInfo> pendingToolCalls;           // Background → Main: tools to execute
+        private List<(string id, string result)> pendingToolResults; // Main → Background: tool results
+        private string pendingFinalMessage;                    // Background → Main: final text response
+        private string pendingError;                           // Background → Main: error message
+        private readonly ManualResetEventSlim toolResultsReady = new ManualResetEventSlim(false);
+
+        private const int MaxAgentIterations = 30;
 
         /// <summary>
-        /// Event raised when the AI sends a response (message text).
+        /// Event raised when the AI sends a text response.
         /// </summary>
         public event EventHandler<string> MessageReceived;
+
+        /// <summary>
+        /// Event raised when a tool is being executed (for progress display).
+        /// </summary>
+        public event EventHandler<string> ToolProgressUpdate;
 
         /// <summary>
         /// Event raised when the AI is processing (true = busy, false = idle).
@@ -64,22 +78,15 @@ namespace TSMapEditor.AI
         public bool IsConfigured => config?.IsConfigured ?? false;
 
         /// <summary>
-        /// The currently selected map region (set by AISelectionCursorAction).
-        /// Null means no selection is active.
+        /// The currently selected map region.
         /// </summary>
         public AISelection CurrentSelection { get; private set; }
 
-        /// <summary>
-        /// Sets the current selection region.
-        /// </summary>
         public void SetSelection(int x, int y, int width, int height)
         {
             CurrentSelection = new AISelection(x, y, width, height);
         }
 
-        /// <summary>
-        /// Clears the current selection.
-        /// </summary>
         public void ClearSelection()
         {
             CurrentSelection = null;
@@ -114,9 +121,9 @@ namespace TSMapEditor.AI
             this.mutationTarget = mutationTarget;
 
             if (map != null && theaterGraphics != null && mutationManager != null && mutationTarget != null)
-                mapOperator = new AIMapOperator(map, theaterGraphics, mutationManager, mutationTarget);
+                toolExecutor = new ToolExecutor(map, theaterGraphics, mutationManager, mutationTarget);
             else
-                mapOperator = null;
+                toolExecutor = null;
         }
 
         /// <summary>
@@ -143,102 +150,79 @@ namespace TSMapEditor.AI
 
         /// <summary>
         /// Must be called from the main game thread (e.g., in Update()).
-        /// Executes any pending map operations that were parsed from AI responses.
+        /// Processes pending tool executions and feeds results back to the agent.
         /// </summary>
         public void ProcessPendingOperations()
         {
-            PendingAIResult result = null;
+            List<ToolCallInfo> toolCallsToExecute = null;
 
-            lock (pendingLock)
+            lock (syncLock)
             {
-                if (pendingResult != null)
+                // Check for final message (agent loop completed)
+                if (pendingFinalMessage != null)
                 {
-                    result = pendingResult;
-                    pendingResult = null;
+                    string message = pendingFinalMessage;
+                    pendingFinalMessage = null;
+                    agentState = AgentState.Idle;
+
+                    chatHistory.Add(ChatMessage.Assistant(message));
+                    MessageReceived?.Invoke(this, message);
+                    IsBusy = false;
+                    BusyStateChanged?.Invoke(this, false);
+                    return;
+                }
+
+                // Check for errors
+                if (pendingError != null)
+                {
+                    string error = pendingError;
+                    pendingError = null;
+                    agentState = AgentState.Idle;
+
+                    ErrorOccurred?.Invoke(this, error);
+                    IsBusy = false;
+                    BusyStateChanged?.Invoke(this, false);
+                    return;
+                }
+
+                // Check for pending tool calls
+                if (agentState == AgentState.WaitingForToolExecution && pendingToolCalls != null)
+                {
+                    toolCallsToExecute = pendingToolCalls;
+                    pendingToolCalls = null;
                 }
             }
 
-            if (result == null)
-                return;
-
-            // Execute operations on the main thread
-            string operationResult = string.Empty;
-            if (result.Operations.Count > 0 && mapOperator != null)
+            // Execute tools OUTSIDE the lock (mutations can be slow)
+            if (toolCallsToExecute != null)
             {
-                try
+                var results = new List<(string id, string result)>();
+                foreach (var tc in toolCallsToExecute)
                 {
-                    operationResult = mapOperator.ExecuteOperations(result.Operations);
-
-                    // Post-execution validation: check if the map has enough spawn waypoints
-                    // This catches both AI forgetting waypoints AND waypoints placed at invalid coordinates
-                    bool hasTerrainOps = result.Operations.Any(o => o.Type == "fill_terrain");
-                    int actualSpawnPoints = mapOperator.CountSpawnWaypoints();
-
-                    if (hasTerrainOps && actualSpawnPoints < 2)
-                    {
-                        // Map was created but doesn't have enough spawn points - auto-add at safe isometric positions
-                        var mapSize = mapOperator.GetMapSize();
-                        int w = mapSize.X; // e.g. 100 for 100x100 map
-                        // Safe positions: 65% from center (matching official MO map average)
-                        // |0.32W|+|0.32W| = 0.64W ≈ 65% of (W-1)
-                        int offset = (int)(w * 0.32);
-                        var defaultWaypoints = new List<MapOperation>
-                        {
-                            new MapOperation { Type = "set_waypoint", X = w - offset, Y = w - offset, WaypointIndex = 0, Description = "自动补全: 玩家1出生点(左上)" },
-                            new MapOperation { Type = "set_waypoint", X = w + offset, Y = w - offset, WaypointIndex = 1, Description = "自动补全: 玩家2出生点(右上)" },
-                            new MapOperation { Type = "set_waypoint", X = w - offset, Y = w + offset, WaypointIndex = 2, Description = "自动补全: 玩家3出生点(左下)" },
-                            new MapOperation { Type = "set_waypoint", X = w + offset, Y = w + offset, WaypointIndex = 3, Description = "自动补全: 玩家4出生点(右下)" },
-                        };
-                        string wpResult = mapOperator.ExecuteOperations(defaultWaypoints);
-                        operationResult += $"\n\n⚠️ 地图只有 {actualSpawnPoints} 个出生点（需要至少 2 个），已自动在四角补全:\n" + wpResult;
-                        Logger.Log($"Auto-fix: Added 4 default waypoints. Map had only {actualSpawnPoints} spawn points.");
-                    }
+                    ToolProgressUpdate?.Invoke(this, $"🔧 {tc.FunctionName}...");
+                    string result = toolExecutor.Execute(tc.FunctionName, tc.Arguments);
+                    results.Add((tc.Id, result));
+                    ToolProgressUpdate?.Invoke(this, $"  {result}");
+                    Logger.Log($"Tool {tc.FunctionName} → {result}");
                 }
-                catch (Exception ex)
+
+                // Send results back to background thread
+                lock (syncLock)
                 {
-                    Logger.Log($"AIChatService: Failed to execute operations: {ex}");
-                    operationResult = $"操作执行失败: {ex.Message}";
+                    pendingToolResults = results;
+                    agentState = AgentState.ToolResultsReady;
+                    toolResultsReady.Set();
                 }
             }
-
-            // Combine message with operation results
-            string fullMessage = result.Message;
-            if (!string.IsNullOrEmpty(operationResult))
-                fullMessage += "\n\n" + operationResult;
-
-            // Auto-set map name if AI provided one (pattern: "地图名称: XXX")
-            if (result.Operations.Count > 0 && mapOperator != null)
-            {
-                var nameMatch = System.Text.RegularExpressions.Regex.Match(
-                    result.Message ?? "", @"地图名称[:：]\s*(.+?)(?:\s*[,，。\n]|$)");
-                if (nameMatch.Success)
-                {
-                    string mapName = nameMatch.Groups[1].Value.Trim();
-                    mapOperator.SetMapName(mapName);
-                    Logger.Log($"Auto-set map name: {mapName}");
-                }
-            }
-
-            // Add assistant message to history
-            chatHistory.Add(ChatMessage.Assistant(fullMessage));
-
-            MessageReceived?.Invoke(this, fullMessage);
-
-            IsBusy = false;
-            BusyStateChanged?.Invoke(this, false);
         }
 
         /// <summary>
-        /// Sends a user message to the AI and processes the response.
-        /// HTTP call runs async; map operations are deferred to main thread via ProcessPendingOperations().
+        /// Sends a user message and starts the agent loop.
         /// </summary>
         public void SendMessage(string userMessage)
         {
-            if (IsBusy)
-                return;
-
-            if (string.IsNullOrWhiteSpace(userMessage))
-                return;
+            if (IsBusy) return;
+            if (string.IsNullOrWhiteSpace(userMessage)) return;
 
             if (!IsConfigured)
             {
@@ -246,19 +230,8 @@ namespace TSMapEditor.AI
                 return;
             }
 
-            // Augment user message with selection context if present
-            string augmentedMessage = userMessage;
-            if (CurrentSelection != null)
-            {
-                int endX = CurrentSelection.X + CurrentSelection.Width - 1;
-                int endY = CurrentSelection.Y + CurrentSelection.Height - 1;
-                augmentedMessage += $"\n[当前选区约束: X范围 {CurrentSelection.X}~{endX}, Y范围 {CurrentSelection.Y}~{endY}。请务必在此范围内生成坐标]";
-            }
+            chatHistory.Add(ChatMessage.User(userMessage));
 
-            // Add augmented message to history (AI sees selection context)
-            chatHistory.Add(ChatMessage.User(augmentedMessage));
-
-            // Start async processing
             IsBusy = true;
             BusyStateChanged?.Invoke(this, true);
 
@@ -268,42 +241,16 @@ namespace TSMapEditor.AI
             {
                 try
                 {
-                    // Build system prompt with map context
-                    string mapContext = (map != null && theaterGraphics != null)
-                        ? MapContextBuilder.BuildContext(map, theaterGraphics)
-                        : "（当前没有打开地图）";
-
-                    string systemPrompt = IntentParser.BuildSystemPrompt(mapContext);
-
-                    // Call AI (this is the only part that needs to be async)
-                    string aiResponse = await provider.ChatAsync(systemPrompt, chatHistory, cts.Token);
-
-                    // Parse response (safe to do on background thread)
-                    var (message, operations) = IntentParser.Parse(aiResponse);
-                    Logger.Log($"AI Parsed: {operations.Count} ops, types: {string.Join(", ", operations.Select(o => o.Type).Distinct())}");
-
-                    // Queue the result for main thread execution
-                    lock (pendingLock)
-                    {
-                        pendingResult = new PendingAIResult
-                        {
-                            Message = message,
-                            Operations = operations
-                        };
-                    }
+                    await RunAgentLoop(cts.Token);
                 }
                 catch (OperationCanceledException)
                 {
-                    ErrorOccurred?.Invoke(this, "AI 请求超时（300秒）。请检查网络连接。");
-                    IsBusy = false;
-                    BusyStateChanged?.Invoke(this, false);
+                    lock (syncLock) { pendingError = "AI 请求超时（300秒）。请检查网络连接。"; }
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log($"AIChatService error: {ex}");
-                    ErrorOccurred?.Invoke(this, $"AI 错误: {ex.Message}");
-                    IsBusy = false;
-                    BusyStateChanged?.Invoke(this, false);
+                    Logger.Log($"AIChatService agent loop error: {ex}");
+                    lock (syncLock) { pendingError = $"AI 错误: {ex.Message}"; }
                 }
                 finally
                 {
@@ -312,10 +259,104 @@ namespace TSMapEditor.AI
             });
         }
 
-        private class PendingAIResult
+        /// <summary>
+        /// The agent loop: call LLM → execute tools → feed results → repeat.
+        /// Runs on a background thread.
+        /// </summary>
+        private async Task RunAgentLoop(CancellationToken ct)
         {
-            public string Message { get; set; }
-            public List<MapOperation> Operations { get; set; }
+            string systemPrompt = BuildSystemPrompt();
+            var tools = ToolDefinitions.GetAllTools();
+
+            for (int iteration = 0; iteration < MaxAgentIterations; iteration++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                Logger.Log($"Agent iteration {iteration + 1}/{MaxAgentIterations}");
+
+                var response = await provider.ChatWithToolsAsync(systemPrompt, chatHistory, tools, ct);
+
+                if (response.HasToolCalls)
+                {
+                    // AI wants to call tools
+                    // Add assistant message with tool calls to history
+                    chatHistory.Add(ChatMessage.AssistantWithToolCalls(response.ToolCalls));
+
+                    // Queue tool calls for main thread execution
+                    lock (syncLock)
+                    {
+                        pendingToolCalls = response.ToolCalls;
+                        agentState = AgentState.WaitingForToolExecution;
+                        toolResultsReady.Reset();
+                    }
+
+                    // Wait for main thread to execute tools and return results
+                    toolResultsReady.Wait(ct);
+
+                    // Get results and add to history
+                    List<(string id, string result)> results;
+                    lock (syncLock)
+                    {
+                        results = pendingToolResults;
+                        pendingToolResults = null;
+                        agentState = AgentState.RunningAgentLoop;
+                    }
+
+                    if (results != null)
+                    {
+                        foreach (var (id, result) in results)
+                        {
+                            chatHistory.Add(ChatMessage.ToolResult(id, result));
+                        }
+                    }
+
+                    // Continue loop — next iteration will call LLM again with tool results
+                }
+                else
+                {
+                    // AI returned text — agent loop complete
+                    string finalMessage = response.TextContent ?? "操作已完成。";
+                    lock (syncLock) { pendingFinalMessage = finalMessage; }
+                    return;
+                }
+            }
+
+            // Max iterations reached
+            lock (syncLock) { pendingFinalMessage = $"操作已完成（达到最大迭代次数 {MaxAgentIterations}）。"; }
+        }
+
+        private string BuildSystemPrompt()
+        {
+            return @"你是 SmartAlert 地图编辑器的 AI 助手，帮助用户编辑红色警戒2/尤里的复仇(Mental Omega mod)的地图。
+
+你可以通过调用工具来编辑地图。每次调用工具后，你会收到执行结果。根据结果决定下一步操作。
+
+工作流程：
+1. 先调用 get_map_info 了解地图尺寸和现状
+2. 根据用户需求逐步调用工具
+3. 完成后用简短中文告诉用户你做了什么
+
+地图设计指南：
+- 对战地图出生点应对称分布，位于地图边缘（如 northwest, southeast）
+- 用 create_plateau 创建中央高地增加战术深度
+- 用 draw_road 连接出生点和地图中央
+- 每个出生点附近（偏移5-10%）放 1-2 片矿石（place_ore），不要和出生点重叠
+- 用 fill_terrain 的 dark_grass/rough_grass 让地形不单调
+- 用 place_trees 装饰空旷区域
+- 创建新地图时记得调用 set_map_name 起名
+
+位置说明：
+- position 参数使用方位词: center, north, south, east, west, northwest, northeast, southwest, southeast
+- 也可以用 x_pct/y_pct 百分比指定精确位置(0=最左/最上, 100=最右/最下)
+- 代码会自动将位置转换为等距坐标，你不需要计算坐标";
+        }
+
+        private enum AgentState
+        {
+            Idle,
+            RunningAgentLoop,
+            WaitingForToolExecution,
+            ToolResultsReady,
         }
     }
 }

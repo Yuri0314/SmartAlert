@@ -33,6 +33,7 @@ namespace TSMapEditor.UI
         // Track pending UI updates from background thread
         private string pendingMessage;
         private string pendingError;
+        private string pendingProgress;
         private bool? pendingBusyState;
         private readonly object pendingLock = new object();
 
@@ -43,6 +44,7 @@ namespace TSMapEditor.UI
             chatService.MessageReceived += OnMessageReceived;
             chatService.ErrorOccurred += OnErrorOccurred;
             chatService.BusyStateChanged += OnBusyStateChanged;
+            chatService.ToolProgressUpdate += OnToolProgress;
         }
 
         /// <summary>
@@ -264,6 +266,14 @@ namespace TSMapEditor.UI
             }
         }
 
+        private void OnToolProgress(object sender, string progress)
+        {
+            lock (pendingLock)
+            {
+                pendingProgress = progress;
+            }
+        }
+
         /// <summary>
         /// Process pending UI updates on the main thread.
         /// </summary>
@@ -281,6 +291,12 @@ namespace TSMapEditor.UI
                 {
                     AddAssistantMessage(pendingMessage);
                     pendingMessage = null;
+                }
+
+                if (pendingProgress != null)
+                {
+                    AddSystemMessage(pendingProgress);
+                    pendingProgress = null;
                 }
 
                 if (pendingError != null)
@@ -304,6 +320,7 @@ namespace TSMapEditor.UI
             chatService.MessageReceived -= OnMessageReceived;
             chatService.ErrorOccurred -= OnErrorOccurred;
             chatService.BusyStateChanged -= OnBusyStateChanged;
+            chatService.ToolProgressUpdate -= OnToolProgress;
 
             base.Kill();
         }
