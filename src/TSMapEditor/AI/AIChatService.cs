@@ -282,25 +282,8 @@ namespace TSMapEditor.AI
                     // Add assistant message with tool calls to history
                     chatHistory.Add(ChatMessage.AssistantWithToolCalls(response.ToolCalls));
 
-                    // Queue tool calls for main thread execution
-                    lock (syncLock)
-                    {
-                        pendingToolCalls = response.ToolCalls;
-                        agentState = AgentState.WaitingForToolExecution;
-                        toolResultsReady.Reset();
-                    }
-
-                    // Wait for main thread to execute tools and return results
-                    toolResultsReady.Wait(ct);
-
-                    // Get results and add to history
-                    List<(string id, string result)> results;
-                    lock (syncLock)
-                    {
-                        results = pendingToolResults;
-                        pendingToolResults = null;
-                        agentState = AgentState.RunningAgentLoop;
-                    }
+                    // 使用封装好的方法：把表单交给主线程，并等待主线程返回结果
+                    List<(string id, string result)> results = ExecuteOnMainThreadAndWait(response.ToolCalls, ct);
 
                     if (results != null)
                     {
@@ -323,6 +306,35 @@ namespace TSMapEditor.AI
 
             // Max iterations reached
             lock (syncLock) { pendingFinalMessage = $"操作已完成（达到最大迭代次数 {MaxAgentIterations}）。"; }
+        }
+
+        /// <summary>
+        /// 把任务移交给主线程执行，并挂起当前后台线程，直到主线程返回结果。
+        /// 这是一个纯手工打造的跨线程 Invoke 方法。
+        /// </summary>
+        private List<(string id, string result)> ExecuteOnMainThreadAndWait(List<ToolCallInfo> toolCalls, CancellationToken ct)
+        {
+            // 1. 把任务装进共享抽屉，通知主线程
+            lock (syncLock)
+            {
+                pendingToolCalls = toolCalls;
+                agentState = AgentState.WaitingForToolExecution;
+                toolResultsReady.Reset(); // 挂起红灯
+            }
+
+            // 2. 彻底休眠，直到主线程干完活把灯变绿
+            toolResultsReady.Wait(ct);
+
+            // 3. 活干完了，从共享抽屉里把结果拿出来
+            List<(string id, string result)> results;
+            lock (syncLock)
+            {
+                results = pendingToolResults;
+                pendingToolResults = null; // 清空抽屉
+                agentState = AgentState.RunningAgentLoop; // 恢复状态
+            }
+
+            return results;
         }
 
         private string BuildSystemPrompt()
