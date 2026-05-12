@@ -380,11 +380,10 @@ namespace TSMapEditor.AI
             var pos = ResolvePosition(args);
             string density = args.TryGetString("density") ?? "medium";
 
-            // Collect ALL tree types available in this theater — AI doesn't pick individual trees
-            var treeTypes = map.Rules.TerrainTypes.FindAll(t =>
-                t.ININame.IndexOf("TREE", StringComparison.OrdinalIgnoreCase) >= 0);
+            // Get curated tree types for current theater (visually coherent, 3-5 types)
+            var treeTypes = GetTheaterTreeTypes();
             if (treeTypes.Count == 0)
-                return "❌ 找不到树木类型";
+                return "❌ 当前场景没有可用的树木类型";
 
             int radius = 8;
             float densityValue = density switch
@@ -400,6 +399,48 @@ namespace TSMapEditor.AI
             mutationManager.PerformMutation(mutation);
 
             return $"✓ 已在 {GetPositionDescription(args)} 放置{density}密度的树木（{treeTypes.Count}种混搭）";
+        }
+
+        /// <summary>
+        /// Returns a curated list of tree types appropriate for the current theater.
+        /// Each theater uses 3-5 visually coherent tree types instead of all available trees.
+        /// Fallback: if none of the curated names exist, pick the first few TREE types.
+        /// </summary>
+        private List<TerrainType> GetTheaterTreeTypes()
+        {
+            string theaterName = (map.LoadedTheaterName ?? map.TheaterName ?? "").ToUpperInvariant();
+
+            // Curated tree lists per theater (INI name prefixes)
+            // RA2/YR standard: TREE01-06 = temperate deciduous, TREE07-12 = boreal/bushes,
+            // TREE13-17 = tropical/special
+            string[] preferredTrees = theaterName switch
+            {
+                "SNOW" => new[] { "TREE06", "TREE07", "TREE08", "TREE15", "TREE16" },  // 针叶/冬季树
+                "URBAN" or "NEWURBAN" => new[] { "TREE01", "TREE02", "TREE05", "TREE14" }, // 城市绿化树
+                "DESERT" => new[] { "TREE12", "TREE13", "TREE17" },                       // 沙漠灌木/仙人掌
+                "LUNAR" => Array.Empty<string>(),                                           // 月球无植被
+                _ => new[] { "TREE01", "TREE02", "TREE03", "TREE05", "TREE06" }             // 温带阔叶混合林
+            };
+
+            var result = new List<TerrainType>();
+            foreach (string name in preferredTrees)
+            {
+                var tt = map.Rules.TerrainTypes.Find(t =>
+                    t.ININame.Equals(name, StringComparison.OrdinalIgnoreCase));
+                if (tt != null)
+                    result.Add(tt);
+            }
+
+            // Fallback: if curated list yields nothing, use first 5 TREE types found
+            if (result.Count == 0)
+            {
+                result = map.Rules.TerrainTypes
+                    .FindAll(t => t.ININame.StartsWith("TREE", StringComparison.OrdinalIgnoreCase))
+                    .GetRange(0, Math.Min(5, map.Rules.TerrainTypes
+                        .FindAll(t => t.ININame.StartsWith("TREE", StringComparison.OrdinalIgnoreCase)).Count));
+            }
+
+            return result;
         }
 
         private string ExecuteClearArea(JsonElement args)
