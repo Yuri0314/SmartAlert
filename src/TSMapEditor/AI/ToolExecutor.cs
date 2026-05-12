@@ -380,26 +380,26 @@ namespace TSMapEditor.AI
             var pos = ResolvePosition(args);
             string density = args.TryGetString("density") ?? "medium";
 
-            var terrainType = map.Rules.TerrainTypes.Find(t =>
+            // Collect ALL tree types available in this theater — AI doesn't pick individual trees
+            var treeTypes = map.Rules.TerrainTypes.FindAll(t =>
                 t.ININame.IndexOf("TREE", StringComparison.OrdinalIgnoreCase) >= 0);
-            if (terrainType == null)
+            if (treeTypes.Count == 0)
                 return "❌ 找不到树木类型";
 
             int radius = 8;
             float densityValue = density switch
             {
-                "sparse" => 0.15f,
-                "medium" => 0.3f,
-                "dense" => 0.5f,
-                _ => 0.3f
+                "sparse" => 0.12f,
+                "medium" => 0.25f,
+                "dense" => 0.45f,
+                _ => 0.25f
             };
 
-            var mutation = new AIPlaceTerrainObjectMutation(mutationTarget, terrainType,
-                pos.X - radius, pos.Y - radius, radius * 2, radius * 2, densityValue,
-                $"放置树木");
+            var mutation = new AIPlaceTerrainObjectMutation(mutationTarget, treeTypes,
+                pos.X, pos.Y, radius, densityValue, $"放置树木");
             mutationManager.PerformMutation(mutation);
 
-            return $"✓ 已在 {GetPositionDescription(args)} 放置{density}密度的树木";
+            return $"✓ 已在 {GetPositionDescription(args)} 放置{density}密度的树木（{treeTypes.Count}种混搭）";
         }
 
         private string ExecuteClearArea(JsonElement args)

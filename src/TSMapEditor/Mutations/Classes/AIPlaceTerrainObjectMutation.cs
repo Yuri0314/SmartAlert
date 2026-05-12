@@ -7,31 +7,49 @@ using TSMapEditor.UI;
 namespace TSMapEditor.Mutations.Classes
 {
     /// <summary>
-    /// A mutation that places terrain objects (trees, rocks, etc.) in a rectangular area.
-    /// Supports density control: objects are scattered randomly rather than filling every cell.
-    /// Used by the AI system's "place_terrain_object" operation.
+    /// A mutation that places terrain objects (trees, rocks, etc.) in a circular area.
+    /// Supports multiple terrain types (randomly mixed) and density control.
+    /// Used by the AI system's "place_trees" operation.
     /// </summary>
     public class AIPlaceTerrainObjectMutation : Mutation
     {
+        /// <summary>
+        /// Creates a mutation that places terrain objects from a list of types in a circular area.
+        /// </summary>
+        /// <param name="terrainTypes">List of terrain types to randomly choose from when placing each object.</param>
+        /// <param name="centerX">Center X coordinate of the circular area.</param>
+        /// <param name="centerY">Center Y coordinate of the circular area.</param>
+        /// <param name="radius">Radius of the circular placement area.</param>
+        /// <param name="density">Probability of placing an object on each eligible cell (0.0 to 1.0).</param>
+        /// <param name="description">Display description for undo history.</param>
         public AIPlaceTerrainObjectMutation(IMutationTarget mutationTarget,
-            TerrainType terrainType, int startX, int startY, int width, int height,
+            List<TerrainType> terrainTypes, int centerX, int centerY, int radius,
             float density, string description)
             : base(mutationTarget)
         {
-            this.terrainType = terrainType;
-            this.startX = startX;
-            this.startY = startY;
-            this.width = width;
-            this.height = height;
-            this.density = Math.Max(0.05f, Math.Min(1.0f, density)); // Clamp 5%-100%
+            this.terrainTypes = terrainTypes ?? throw new ArgumentNullException(nameof(terrainTypes));
+            this.centerX = centerX;
+            this.centerY = centerY;
+            this.radius = Math.Max(1, radius);
+            this.density = Math.Max(0.05f, Math.Min(1.0f, density));
             this.description = description;
         }
 
-        private readonly TerrainType terrainType;
-        private readonly int startX;
-        private readonly int startY;
-        private readonly int width;
-        private readonly int height;
+        // Legacy single-type constructor for backward compatibility
+        public AIPlaceTerrainObjectMutation(IMutationTarget mutationTarget,
+            TerrainType terrainType, int startX, int startY, int width, int height,
+            float density, string description)
+            : this(mutationTarget,
+                  new List<TerrainType> { terrainType },
+                  startX + width / 2, startY + height / 2, Math.Max(width, height) / 2,
+                  density, description)
+        {
+        }
+
+        private readonly List<TerrainType> terrainTypes;
+        private readonly int centerX;
+        private readonly int centerY;
+        private readonly int radius;
         private readonly float density;
         private readonly string description;
 
@@ -41,7 +59,7 @@ namespace TSMapEditor.Mutations.Classes
         public override string GetDisplayString()
         {
             return string.IsNullOrEmpty(description)
-                ? $"AI: Place {terrainType.ININame} at ({startX},{startY}) {width}x{height} density={density:P0}"
+                ? $"AI: Place terrain objects at ({centerX},{centerY}) r={radius} density={density:P0}"
                 : $"AI: {description}";
         }
 
@@ -50,12 +68,19 @@ namespace TSMapEditor.Mutations.Classes
             placedObjects = new List<PlacedTerrainObj>();
             var map = MutationTarget.Map;
             var random = new Random();
+            int r2 = radius * radius;
 
-            for (int y = startY; y < startY + height; y++)
+            for (int y = centerY - radius; y <= centerY + radius; y++)
             {
-                for (int x = startX; x < startX + width; x++)
+                for (int x = centerX - radius; x <= centerX + radius; x++)
                 {
-                    // Density check: skip cells randomly based on density
+                    // Circular boundary check
+                    int dx = x - centerX;
+                    int dy = y - centerY;
+                    if (dx * dx + dy * dy > r2)
+                        continue;
+
+                    // Density check: skip cells randomly
                     if (random.NextDouble() > density)
                         continue;
 
@@ -73,8 +98,11 @@ namespace TSMapEditor.Mutations.Classes
                     if (cell.HasInfantry())
                         continue;
 
+                    // Randomly pick a terrain type from the list
+                    var chosenType = terrainTypes[random.Next(terrainTypes.Count)];
+
                     // Create and place the terrain object
-                    var terrainObj = new TerrainObject(terrainType, new Point2D(x, y));
+                    var terrainObj = new TerrainObject(chosenType, new Point2D(x, y));
                     map.AddTerrainObject(terrainObj);
                     placedObjects.Add(new PlacedTerrainObj
                     {
