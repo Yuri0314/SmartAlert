@@ -99,12 +99,24 @@ namespace TSMapEditor.AI
         {
             int spawnCount = map.Waypoints.Count(wp => wp.Identifier >= 0 && wp.Identifier <= 7);
             var houses = map.GetHouses();
+            string theaterName = map.LoadedTheaterName ?? map.TheaterName ?? "UNKNOWN";
+
+            // Collect available LAT ground types (usable for fill_terrain)
+            var latGrounds = theaterGraphics.Theater.LATGrounds;
+            var latNames = latGrounds.Select(g => g.GroundTileSet?.SetName).Where(n => n != null).ToList();
+
+            // Collect available terrain object types (trees, rocks, etc.) - first 20
+            var terrainTypes = map.Rules.TerrainTypes.Take(20)
+                .Select(t => t.ININame).ToList();
 
             return $"地图尺寸: {map.Size.X}x{map.Size.Y}\n" +
+                   $"场景(Theater): {theaterName}\n" +
                    $"等距中心: ({positionResolver.Center},{positionResolver.Center})\n" +
                    $"菱形半径: {positionResolver.DiamondRadius}\n" +
                    $"当前出生点数量: {spawnCount}\n" +
                    $"可用所属方: {string.Join(", ", houses.Select(h => h.ININame))}\n" +
+                   $"可用地面类型: {string.Join(", ", latNames)}\n" +
+                   $"可用地物类型(示例): {string.Join(", ", terrainTypes)}\n" +
                    $"地图名称: {map.Basic.Name ?? "(未设置)"}";
         }
 
@@ -113,7 +125,8 @@ namespace TSMapEditor.AI
             string terrain = args.GetProperty("terrain").GetString();
             string scope = args.GetProperty("scope").GetString();
 
-            // Map terrain name to tileset name
+            // Map common shorthand names to tileset names (legacy support)
+            // AI can also pass tileset names directly from get_map_info's asset list
             string tileSetName = terrain switch
             {
                 "grass" => "Lat Grass",
@@ -121,7 +134,9 @@ namespace TSMapEditor.AI
                 "rough_grass" => "LAT Rough Grass",
                 "sand" => "LAT Sand",
                 "pavement" => "LAT Pavement",
-                _ => terrain
+                "snow" => "LAT Snow",
+                "ice" => "Ice",
+                _ => terrain  // Pass through — allows AI to use any tileset name directly
             };
 
             int tileIndex = FindTileIndexByName(tileSetName);

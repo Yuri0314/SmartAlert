@@ -339,14 +339,18 @@ namespace TSMapEditor.AI
 
         private string BuildSystemPrompt()
         {
-            return @"你是 SmartAlert 地图编辑器的 AI 助手，帮助用户编辑红色警戒2/尤里的复仇(Mental Omega mod)的地图。
+            string theaterName = map.LoadedTheaterName ?? map.TheaterName ?? "TEMPERATE";
+            string theaterGuide = GetTheaterGuide(theaterName);
+
+            return $@"你是 SmartAlert 地图编辑器的 AI 助手，帮助用户编辑红色警戒2/尤里的复仇(Mental Omega mod)的地图。
 
 你可以通过调用工具来编辑地图。每次调用工具后，你会收到执行结果。根据结果决定下一步操作。
+当前场景: {theaterName}
 
 === 严格操作顺序（必须按此顺序执行）===
-1. 调用 get_map_info 了解地图尺寸
+1. 调用 get_map_info 了解地图尺寸和可用素材
 2. 调用 set_map_name 命名地图
-3. 调用 fill_terrain 铺设基础地形
+3. 调用 fill_terrain 铺设基础地形（使用 get_map_info 返回的可用地面类型）
 4. 调用 create_plateau 创建高地（放在 center）
 5. 调用 set_spawn_point 设置所有出生点
 6. 调用 place_ore 放置矿石（必须在出生点设置之后！）
@@ -370,18 +374,56 @@ namespace TSMapEditor.AI
 - 例如：出生点在 x_pct=15,y_pct=15 → 矿石放在 x_pct=25,y_pct=15 和 x_pct=15,y_pct=25
 - 绝对禁止在出生点的相同位置放矿石！
 
-=== 地形设计指南 ===
-- 用 create_plateau 在 center 创建高地增加战术深度
-- 用 draw_road 连接出生点和地图中央
-- 用 fill_terrain 的 dark_grass/rough_grass 在局部区域增加变化
-- 用 place_trees 在非出生点、非道路区域装饰
+=== 场景设计指南（{theaterName}）===
+{theaterGuide}
 
 === 位置说明 ===
 - position 参数使用方位词: center, north, south, east, west, northwest, northeast, southwest, southeast
 - 推荐使用 x_pct/y_pct 百分比精确指定位置(0=最左/最上, 100=最右/最下)
 - 代码会自动将位置转换为等距坐标，你不需要计算坐标
 
+=== 重要：fill_terrain 的 terrain 参数 ===
+- 你可以使用 get_map_info 返回的「可用地面类型」中的任何名称作为 terrain 参数
+- 也可以使用快捷名: grass, dark_grass, rough_grass, sand, pavement, snow, ice
+
 完成后用简短中文告诉用户你做了什么。";
+        }
+
+        private string GetTheaterGuide(string theaterName)
+        {
+            return theaterName.ToUpperInvariant() switch
+            {
+                "SNOW" => @"- 基础地形使用雪地（snow）而非草地
+- 树木使用针叶林/雪松（FRTREE, SNTREE 等）
+- 水面区域可使用冰面（ice）
+- 建筑相对稀疏，体现寒冷荒凉感
+- 地形装饰使用 get_map_info 返回的可用地面类型",
+
+                "URBAN" or "NEWURBAN" => @"- 大面积使用 pavement 铺设地面
+- 密集放置城市建筑（用 place_building）
+- 用 draw_road 构建道路网络（多条相交道路）
+- 树木稀疏，仅在公园/绿化带区域
+- 体现城市密集、工业化的感觉",
+
+                "DESERT" => @"- 基础地形使用沙地（sand）而非草地
+- 植被极少，只在绿洲附近放少量树
+- 地形相对平坦，高地较矮
+- 利用岩石和沙丘增加地形变化
+- 体现干燥、广袤的沙漠感",
+
+                "LUNAR" => @"- 月球表面地形，极其荒凉
+- 没有任何植被和水面
+- 地形以灰色月面为主
+- 利用高低差制造陨石坑效果
+- 建筑使用科技/太空风格",
+
+                _ => @"- 以草地为基础地形（grass）
+- 用 dark_grass/rough_grass 在局部区域增加变化
+- 用 create_plateau 在 center 创建高地增加战术深度
+- 用 draw_road 连接出生点和地图中央
+- 用 place_trees 在非出生点、非道路区域装饰
+- 可用 Farm Crops 等特殊地形增加乡村感"
+            };
         }
 
         private enum AgentState
