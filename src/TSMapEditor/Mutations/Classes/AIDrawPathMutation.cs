@@ -110,6 +110,10 @@ namespace TSMapEditor.Mutations.Classes
             int minX = int.MaxValue, minY = int.MaxValue;
             int maxX = int.MinValue, maxY = int.MinValue;
 
+            // Separate tracking for actually-placed tile bounding box (used for AutoLAT)
+            int placedMinX = int.MaxValue, placedMinY = int.MaxValue;
+            int placedMaxX = int.MinValue, placedMaxY = int.MinValue;
+
             int radius = pathWidth / 2;
             int r2 = radius * radius;
 
@@ -201,6 +205,10 @@ namespace TSMapEditor.Mutations.Classes
 
             if (isMultiCellTile)
             {
+                // For water tiles, all path cells get placed — no height skipping
+                placedMinX = minX; placedMinY = minY;
+                placedMaxX = maxX; placedMaxY = maxY;
+
                 // For multi-cell tiles (Water), we need to place complete tile images
                 var tileSets = theaterGraphics.Theater.TileSets;
                 int tileSetIndex = -1;
@@ -301,17 +309,24 @@ namespace TSMapEditor.Mutations.Classes
             else
             {
                 // Simple 1x1 terrain tiles (roads, pavement, etc.)
+                // Record the height at the start of the path
+                byte baseHeight = Map.GetTile(startX, startY)?.Level ?? 0;
+
                 foreach (var pt in pathCells)
                 {
                     var cell = Map.GetTile(pt);
                     if (cell != null)
                     {
-                        // DO NOT overwrite ramp/cliff tiles — this matches official map behavior
-                        // where roads stop at cliff edges and ramps serve as natural transitions.
-                        // Uses TileIndex-based check which is reliable even when TileImage cache is null.
-                        if (!IsCellRamp(cell))
+                        // DO NOT overwrite ramp/cliff tiles or cells at significantly different heights.
+                        // This prevents roads from cutting through plateaus and causing visual artifacts.
+                        if (!IsCellRamp(cell) && Math.Abs(cell.Level - baseHeight) <= 1)
                         {
                             cell.ChangeTileIndex(tileIndex, 0);
+                            // Track bounding box of actually-placed tiles only
+                            placedMinX = Math.Min(placedMinX, pt.X);
+                            placedMinY = Math.Min(placedMinY, pt.Y);
+                            placedMaxX = Math.Max(placedMaxX, pt.X);
+                            placedMaxY = Math.Max(placedMaxY, pt.Y);
                         }
                     }
                 }
@@ -319,11 +334,13 @@ namespace TSMapEditor.Mutations.Classes
 
             undoTerrainData = originalTerrainData.ToArray();
 
-            // Apply AutoLAT to blend LAT terrain edges (Pavement, DirtRoad, etc.)
-            if (MutationTarget.AutoLATEnabled && minX <= maxX)
+            // Apply AutoLAT only to the bounding box of actually-placed tiles.
+            // Using the full path bounding box would corrupt skipped cells (e.g. cliff tiles)
+            // and produce black dotted line artifacts.
+            if (MutationTarget.AutoLATEnabled && placedMinX <= placedMaxX)
             {
                 int tileSetId = theaterGraphics.GetTileSetId(tileIndex);
-                ApplyAutoLATForTileSetPlacement(tileSetId, minX - 1, minY - 1, maxX + 1, maxY + 1);
+                ApplyAutoLATForTileSetPlacement(tileSetId, placedMinX - 1, placedMinY - 1, placedMaxX + 1, placedMaxY + 1);
             }
 
             MutationTarget.InvalidateMap();

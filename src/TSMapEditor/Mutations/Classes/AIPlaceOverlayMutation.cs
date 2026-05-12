@@ -48,12 +48,34 @@ namespace TSMapEditor.Mutations.Classes
             undoData = new List<OriginalOverlayData>();
             var map = MutationTarget.Map;
 
+            // Build spawn point exclusion zones (waypoints 0-7 = player spawn points)
+            const int spawnExclusionRadius = 5;
+            var spawnPoints = new List<Point2D>();
+            foreach (var wp in map.Waypoints)
+            {
+                if (wp.Identifier >= 0 && wp.Identifier <= 7)
+                    spawnPoints.Add(wp.Position);
+            }
+
             for (int y = startY; y < startY + height; y++)
             {
                 for (int x = startX; x < startX + width; x++)
                 {
                     var cell = map.GetTile(x, y);
                     if (cell == null)
+                        continue;
+
+                    // Skip cells near spawn points to prevent base deployment issues
+                    bool nearSpawn = false;
+                    foreach (var sp in spawnPoints)
+                    {
+                        if (Math.Abs(x - sp.X) + Math.Abs(y - sp.Y) <= spawnExclusionRadius)
+                        {
+                            nearSpawn = true;
+                            break;
+                        }
+                    }
+                    if (nearSpawn)
                         continue;
 
                     // Save original overlay for undo

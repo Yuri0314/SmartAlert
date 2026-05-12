@@ -108,8 +108,26 @@ namespace TSMapEditor.Mutations.Classes
                         cell.Smudge = null;
                     }
 
-                    // Change terrain tile
-                    cell.ChangeTileIndex(tileIndex, 0);
+                    // Skip ramp/cliff tiles — overwriting these produces black artifacts
+                    bool isRamp = false;
+                    if (cell.TileImage != null && cell.TileImage.TMPImages != null &&
+                        cell.SubTileIndex < cell.TileImage.TMPImages.Length)
+                    {
+                        var tmpImage = cell.TileImage.TMPImages[cell.SubTileIndex]?.TmpImage;
+                        if (tmpImage != null && tmpImage.RampType != TSMapEditor.CCEngine.RampType.None)
+                            isRamp = true;
+                    }
+
+                    // Also check via TileIndex range for ramp tileset
+                    var rampTileSet = MutationTarget.TheaterGraphics.Theater.RampTileSet;
+                    if (rampTileSet != null && rampTileSet.ContainsTile(cell.TileIndex))
+                        isRamp = true;
+
+                    if (!isRamp)
+                    {
+                        // Change terrain tile
+                        cell.ChangeTileIndex(tileIndex, 0);
+                    }
 
                     // Flatten height if requested (e.g., water should be at level 0)
                     if (flattenHeight)

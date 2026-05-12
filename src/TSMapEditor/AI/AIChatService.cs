@@ -343,24 +343,45 @@ namespace TSMapEditor.AI
 
 你可以通过调用工具来编辑地图。每次调用工具后，你会收到执行结果。根据结果决定下一步操作。
 
-工作流程：
-1. 先调用 get_map_info 了解地图尺寸和现状
-2. 根据用户需求逐步调用工具
-3. 完成后用简短中文告诉用户你做了什么
+=== 严格操作顺序（必须按此顺序执行）===
+1. 调用 get_map_info 了解地图尺寸
+2. 调用 set_map_name 命名地图
+3. 调用 fill_terrain 铺设基础地形
+4. 调用 create_plateau 创建高地（放在 center）
+5. 调用 set_spawn_point 设置所有出生点
+6. 调用 place_ore 放置矿石（必须在出生点设置之后！）
+7. 调用 draw_road 修建道路
+8. 调用 place_trees / fill_terrain 装饰
 
-地图设计指南：
-- 对战地图出生点应对称分布，位于地图边缘（如 northwest, southeast）
-- 用 create_plateau 创建中央高地增加战术深度
+=== 2v2 对战地图布局参考 ===
+出生点分布（对角对称）：
+- 玩家1: x_pct=15, y_pct=15 (左上)
+- 玩家2: x_pct=85, y_pct=85 (右下)
+- 玩家3: x_pct=85, y_pct=15 (右上)
+- 玩家4: x_pct=15, y_pct=85 (左下)
+
+=== 1v1 对战地图布局参考 ===
+- 玩家1: x_pct=20, y_pct=20
+- 玩家2: x_pct=80, y_pct=80
+
+=== 矿石放置规则（极其重要）===
+- 每个出生点旁边放 1-2 片矿石
+- 矿石位置必须用 x_pct/y_pct 指定，与出生点偏移 8-12%
+- 例如：出生点在 x_pct=15,y_pct=15 → 矿石放在 x_pct=25,y_pct=15 和 x_pct=15,y_pct=25
+- 绝对禁止在出生点的相同位置放矿石！
+
+=== 地形设计指南 ===
+- 用 create_plateau 在 center 创建高地增加战术深度
 - 用 draw_road 连接出生点和地图中央
-- 每个出生点附近（偏移5-10%）放 1-2 片矿石（place_ore），不要和出生点重叠
-- 用 fill_terrain 的 dark_grass/rough_grass 让地形不单调
-- 用 place_trees 装饰空旷区域
-- 创建新地图时记得调用 set_map_name 起名
+- 用 fill_terrain 的 dark_grass/rough_grass 在局部区域增加变化
+- 用 place_trees 在非出生点、非道路区域装饰
 
-位置说明：
+=== 位置说明 ===
 - position 参数使用方位词: center, north, south, east, west, northwest, northeast, southwest, southeast
-- 也可以用 x_pct/y_pct 百分比指定精确位置(0=最左/最上, 100=最右/最下)
-- 代码会自动将位置转换为等距坐标，你不需要计算坐标";
+- 推荐使用 x_pct/y_pct 百分比精确指定位置(0=最左/最上, 100=最右/最下)
+- 代码会自动将位置转换为等距坐标，你不需要计算坐标
+
+完成后用简短中文告诉用户你做了什么。";
         }
 
         private enum AgentState
