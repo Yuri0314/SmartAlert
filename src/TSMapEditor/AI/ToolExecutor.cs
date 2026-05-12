@@ -410,16 +410,22 @@ namespace TSMapEditor.AI
         {
             string theaterName = (map.LoadedTheaterName ?? map.TheaterName ?? "").ToUpperInvariant();
 
-            // Curated tree lists per theater (INI name prefixes)
-            // RA2/YR standard: TREE01-06 = temperate deciduous, TREE07-12 = boreal/bushes,
-            // TREE13-17 = tropical/special
+            // Curated tree lists per theater — derived from analyzing 720 official Mental Omega maps.
+            // Each list contains the Top 5 most frequently used tree types for that theater.
             string[] preferredTrees = theaterName switch
             {
-                "SNOW" => new[] { "TREE06", "TREE07", "TREE08", "TREE15", "TREE16" },  // 针叶/冬季树
-                "URBAN" or "NEWURBAN" => new[] { "TREE01", "TREE02", "TREE05", "TREE14" }, // 城市绿化树
-                "DESERT" => new[] { "TREE12", "TREE13", "TREE17" },                       // 沙漠灌木/仙人掌
-                "LUNAR" => Array.Empty<string>(),                                           // 月球无植被
-                _ => new[] { "TREE01", "TREE02", "TREE03", "TREE05", "TREE06" }             // 温带阔叶混合林
+                // SNOW (162 maps): TREE25(9561), TREE26(9123), TREE27(8884), TREE24(7636), TREE23(7609)
+                "SNOW" => new[] { "TREE25", "TREE26", "TREE27", "TREE24", "TREE23" },
+                // URBAN (110 maps): TREE09(3604), TREE01(3330), TREE05(2193), TREE06(2190), TREE03(2099)
+                "URBAN" => new[] { "TREE09", "TREE01", "TREE05", "TREE06", "TREE03" },
+                // NEWURBAN (85 maps): TREE05(3374), TREE08(3156), TREE12(3069), TREE04(3062), TREE07(3055)
+                "NEWURBAN" => new[] { "TREE05", "TREE08", "TREE12", "TREE04", "TREE07" },
+                // DESERT (153 maps): TREE21(5967), TREE22(5554), TREE23(5328), TREE20(5144), TREE24(5064)
+                "DESERT" => new[] { "TREE21", "TREE22", "TREE23", "TREE20", "TREE24" },
+                // LUNAR (2 maps): no vegetation
+                "LUNAR" => Array.Empty<string>(),
+                // TEMPERATE (208 maps): TREE22(10370), TREE21(9279), TREE23(8471), TREE08(7797), TREE20(7582)
+                _ => new[] { "TREE22", "TREE21", "TREE23", "TREE08", "TREE20" }
             };
 
             var result = new List<TerrainType>();
