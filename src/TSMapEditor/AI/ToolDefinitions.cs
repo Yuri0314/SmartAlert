@@ -29,6 +29,7 @@ namespace TSMapEditor.AI
             PlaceDecorations,
             ClearArea,
             SetMapName,
+            SearchUnits,
         };
 
         // ─── Query Tools ────────────────────────────────────────────
@@ -215,6 +216,16 @@ namespace TSMapEditor.AI
             {
                 ["name"] = PropString("地图名称(英文)"),
             }, required: new[] { "name" })
+        };
+
+        public static ToolDefinition SearchUnits => new ToolDefinition
+        {
+            Name = "search_units",
+            Description = "搜索单位编码及其含义。当用户提到某种建筑/载具/动物但你不确定INI代码时，用关键词搜索。支持中英文搜索。",
+            Parameters = Schema(new Dictionary<string, object>
+            {
+                ["keyword"] = PropString("搜索关键词，如 'truck' '卡车' 'European' '路灯' 'farm' '医院' 等"),
+            }, required: new[] { "keyword" })
         };
 
         // ─── Schema Helpers ─────────────────────────────────────────

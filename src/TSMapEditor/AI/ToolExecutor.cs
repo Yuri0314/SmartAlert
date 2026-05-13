@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using Rampastring.Tools;
@@ -26,6 +27,9 @@ namespace TSMapEditor.AI
         private readonly IMutationTarget mutationTarget;
         private readonly PositionResolver positionResolver;
 
+        // Unit reference: code -> description, loaded from References/unit_reference.json
+        private readonly Dictionary<string, string> unitReference = new(StringComparer.OrdinalIgnoreCase);
+
         public ToolExecutor(Map map, TheaterGraphics theaterGraphics,
             MutationManager mutationManager, IMutationTarget mutationTarget)
         {
@@ -34,6 +38,7 @@ namespace TSMapEditor.AI
             this.mutationManager = mutationManager ?? throw new ArgumentNullException(nameof(mutationManager));
             this.mutationTarget = mutationTarget ?? throw new ArgumentNullException(nameof(mutationTarget));
             this.positionResolver = new PositionResolver(map);
+            LoadUnitReference();
         }
 
         /// <summary>
@@ -61,6 +66,7 @@ namespace TSMapEditor.AI
                     "place_decorations" => ExecutePlaceDecorations(args),
                     "clear_area" => ExecuteClearArea(args),
                     "set_map_name" => ExecuteSetMapName(args),
+                    "search_units" => ExecuteSearchUnits(args),
                     _ => $"❌ 未知工具: {toolName}"
                 };
             }
@@ -585,6 +591,85 @@ namespace TSMapEditor.AI
                 return $"✓ 地图名称已设置为: {name}";
             }
             return "❌ 地图名称不能为空";
+        }
+
+        private string ExecuteSearchUnits(JsonElement args)
+        {
+            string keyword = args.GetProperty("keyword").GetString()?.Trim();
+            if (string.IsNullOrEmpty(keyword))
+                return "❌ 请提供搜索关键词";
+
+            string category = args.TryGetString("category");
+
+            var results = new List<string>();
+            foreach (var kvp in unitReference)
+            {
+                bool match = kvp.Key.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             kvp.Value.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+                if (match)
+                    results.Add($"  {kvp.Key} = {kvp.Value}");
+            }
+
+            if (results.Count == 0)
+                return $"未找到匹配 \"{keyword}\" 的单位";
+
+            // Limit to 20 results to avoid overwhelming
+            if (results.Count > 20)
+                return $"找到 {results.Count} 个匹配项（显示前20个）:\n{string.Join("\n", results.Take(20))}";
+
+            return $"找到 {results.Count} 个匹配项:\n{string.Join("\n", results)}";
+        }
+
+        /// <summary>
+        /// Loads the unit reference JSON file, flattening all categories into a single
+        /// code -> description lookup dictionary.
+        /// </summary>
+        private void LoadUnitReference()
+        {
+            try
+            {
+                // Try multiple possible locations for the reference file
+                string[] searchPaths = new[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AI", "References", "unit_reference.json"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "AI", "References", "unit_reference.json"),
+                };
+
+                string refPath = null;
+                foreach (var p in searchPaths)
+                {
+                    if (File.Exists(p)) { refPath = p; break; }
+                }
+
+                if (refPath == null)
+                {
+                    Logger.Log("ToolExecutor: unit_reference.json not found, search_units will be limited");
+                    return;
+                }
+
+                string json = File.ReadAllText(refPath);
+                using var doc = JsonDocument.Parse(json);
+
+                if (doc.RootElement.TryGetProperty("categories", out var categories))
+                {
+                    foreach (var cat in categories.EnumerateObject())
+                    {
+                        if (cat.Value.TryGetProperty("items", out var items))
+                        {
+                            foreach (var item in items.EnumerateObject())
+                            {
+                                unitReference[item.Name] = item.Value.GetString() ?? item.Name;
+                            }
+                        }
+                    }
+                }
+
+                Logger.Log($"ToolExecutor: Loaded {unitReference.Count} unit references");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"ToolExecutor: Failed to load unit_reference.json: {ex.Message}");
+            }
         }
 
         // ─── Description Helpers ────────────────────────────────────

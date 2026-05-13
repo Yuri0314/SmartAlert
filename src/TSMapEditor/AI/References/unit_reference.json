@@ -1,0 +1,360 @@
+{
+  "meta": {
+    "description": "RA2/YR base game + Mental Omega unit code reference",
+    "version": "1.0",
+    "source": "720 official MO maps analysis + RA2/YR modding docs"
+  },
+  "categories": {
+    "functional_buildings": {
+      "description": "Capturable/functional buildings - DO NOT scatter randomly",
+      "items": {
+        "CAOILD": "Oil Derrick (油矿/石油井架) - 可占领产钱",
+        "CAOILDOM": "Oil Derrick Variant (油矿变体) - 可占领产钱",
+        "CABHUT": "Bridge Repair Hut (桥梁修理站) - 必须在桥旁边",
+        "CAHOSP": "Hospital (医院) - 可占领治愈步兵",
+        "CAFHOSP": "Field Hospital (野战医院) - 可占领",
+        "CAAIRP": "Airport (机场) - 可占领提供伞兵",
+        "CAPOWR": "Power Plant (发电厂) - 可占领提供电力",
+        "CAMACH": "Machine Shop (维修站) - 可占领修复载具",
+        "CALAB": "Tech Lab (科技实验室) - 可占领解锁科技",
+        "CASAM": "SAM Site (防空导弹阵地)",
+        "CASSAM": "SAM Site Variant (防空导弹变体)",
+        "CAHMG": "HMG Nest (重机枪碉堡)",
+        "CAFORT": "Fortress (要塞)",
+        "GASNPR": "Sniper Nest (狙击点)",
+        "CACOMN": "Communications Center (通讯中心)",
+        "CARAD": "Radar Dome (雷达站)"
+      }
+    },
+    "decoration_containers": {
+      "description": "Barrels, crates, walls - safe to scatter",
+      "items": {
+        "CABARR01": "Barrel (木桶/油桶)",
+        "CABARR02": "Barrel Variant (木桶变体)",
+        "CAWALL": "Fence/Wall (围墙/栅栏)",
+        "CAEXPS": "Explosive Barrel (爆炸桶)",
+        "GASAND": "Sandbag (沙袋)",
+        "AMMOCRAT": "Ammo Crate (弹药箱)",
+        "CASHLD": "Shield/Barrier (护盾/路障)",
+        "CAFLAG": "Flag (旗帜)"
+      }
+    },
+    "decoration_misc": {
+      "description": "Small decorative objects - safe to scatter",
+      "items": {
+        "CAMISC01": "Misc Decoration (杂项装饰物1)",
+        "CAMISC02": "Misc Decoration (杂项装饰物2)",
+        "CAMISC03": "Misc Decoration (杂项装饰物3 - 杆子)",
+        "CAMISC04": "Misc Decoration (杂项装饰物4)",
+        "CAMISC05": "Misc Decoration (杂项装饰物5 - 标志牌)",
+        "CAMISC06": "Misc Decoration (杂项装饰物6)",
+        "CAMSC01": "Small Misc Object (小型杂物1)",
+        "CAMSC02": "Small Misc Object (小型杂物2)",
+        "CAMSC03": "Small Misc Object (小型杂物3)",
+        "CAMSC04": "Small Misc Object (小型杂物4)",
+        "CAMSC05": "Small Misc Object (小型杂物5)",
+        "CAMSC06": "Small Misc Object (小型杂物6)",
+        "CAMSC07": "Small Misc Object (小型杂物7)",
+        "CAMSC08": "Small Misc Object (小型杂物8)",
+        "CAMSC09": "Small Misc Object (小型杂物9)",
+        "CAMSC10": "Small Misc Object (小型杂物10)",
+        "CAMSC11": "Small Misc Object (小型杂物11)",
+        "CAMSC12": "Small Misc Object (小型杂物12)",
+        "CAMSC13": "Small Misc Object (小型杂物13)",
+        "CAMSC14": "Small Misc Object (小型杂物14)",
+        "CAMSC15": "Small Misc Object (小型杂物15)"
+      }
+    },
+    "lamps": {
+      "description": "Street lamps and lights - safe to scatter",
+      "items": {
+        "NEGLAMP": "Neon Lamp (霓虹路灯) - 通用",
+        "INGALITE": "Interior Light (室内照明灯) - 通用",
+        "INYELWLAMP": "Yellow Lamp (黄色路灯)",
+        "INBLULMP": "Blue Lamp (蓝色路灯)",
+        "INPURPLAMP": "Purple Lamp (紫色路灯)",
+        "INREDLMP": "Red Lamp (红色路灯)",
+        "INGRNLMP": "Green Lamp (绿色路灯)",
+        "INORANLAMP": "Orange Lamp (橙色路灯)",
+        "INAQUALAMP": "Aqua Lamp (水蓝色路灯)",
+        "SNODUSLAMP": "Snow Dusk Lamp (雪地黄昏路灯) - SNOW专用",
+        "SNODAYLAMP": "Snow Day Lamp (雪地日光路灯) - SNOW专用",
+        "SNONITLAMP": "Snow Night Lamp (雪地夜间路灯) - SNOW专用",
+        "SNOMORLAMP": "Snow Morning Lamp (雪地晨光路灯) - SNOW专用",
+        "TEMDUSLAMP": "Temperate Dusk Lamp (温带黄昏路灯) - TEMPERATE专用",
+        "TEMDAYLAMP": "Temperate Day Lamp (温带日光路灯) - TEMPERATE专用",
+        "TEMNITLAMP": "Temperate Night Lamp (温带夜间路灯) - TEMPERATE专用",
+        "TEMMORLAMP": "Temperate Morning Lamp (温带晨光路灯) - TEMPERATE专用"
+      }
+    },
+    "houses_european": {
+      "description": "European-style civilian houses",
+      "items": {
+        "CAEUR1": "European House (欧式民房1)",
+        "CAEUR2": "European House (欧式民房2)",
+        "CAEURO05": "European Building (欧式建筑)",
+        "EUROC": "European Complex (欧式建筑群)"
+      }
+    },
+    "houses_american": {
+      "description": "American-style houses and suburbs",
+      "items": {
+        "CAHSE01": "American House (美式民房1)",
+        "CAHSE02": "American House (美式民房2)",
+        "CAHSE03": "American House (美式民房3)",
+        "CAHSE04": "American House (美式民房4)",
+        "CAHSE05": "American House (美式民房5)",
+        "CAHSE06": "American House (美式民房6)",
+        "CAHSE07": "American House (美式民房7)"
+      }
+    },
+    "houses_russian": {
+      "description": "Russian-style buildings",
+      "items": {
+        "CARUS02A": "Russian House A (俄式民房A)",
+        "CARUS02B": "Russian House B (俄式民房B)",
+        "CARUS02C": "Russian House C (俄式民房C)",
+        "CARUS02D": "Russian House D (俄式民房D)",
+        "CARUS02E": "Russian House E (俄式民房E)",
+        "CARUS02F": "Russian House F (俄式民房F)",
+        "CARUS02G": "Russian House G (俄式民房G)",
+        "CARUS04": "Russian Building (俄式建筑4)",
+        "CARUS07": "Russian Building (俄式建筑7)",
+        "CARUS08": "Russian Building (俄式建筑8)",
+        "CARUS09": "Russian Building (俄式建筑9)",
+        "CARUS10": "Russian Building (俄式建筑10)",
+        "CARUS11": "Russian Building (俄式建筑11)"
+      }
+    },
+    "houses_city": {
+      "description": "Urban city buildings - New York, Chicago, etc.",
+      "items": {
+        "CAURB01": "Urban Building (城市建筑1)",
+        "CAURB02": "Urban Building (城市建筑2)",
+        "CAURB03": "Urban Building (城市建筑3)",
+        "CANEWY01": "New York Building (纽约建筑1)",
+        "CANEWY06": "New York Building (纽约建筑6)",
+        "CANEWY07": "New York Building (纽约建筑7)",
+        "CANEWY08": "New York Building (纽约建筑8)",
+        "CANEWY10": "New York Building (纽约建筑10)",
+        "CANEWY11": "New York Building (纽约建筑11)",
+        "CANEWY12": "New York Building (纽约建筑12)",
+        "CANEWY13": "New York Building (纽约建筑13)",
+        "CANEWY14": "New York Building (纽约建筑14)",
+        "CANEWY15": "New York Building (纽约建筑15)",
+        "CANEWY16": "New York Building (纽约建筑16)",
+        "CANEWY17": "New York Building (纽约建筑17)",
+        "CANEWY18": "New York Building (纽约建筑18)",
+        "CANEWY20": "New York Building (纽约建筑20)",
+        "CANEWY21": "New York Building (纽约建筑21)",
+        "CACHIG01": "Chicago Building (芝加哥建筑1)",
+        "CACHIG02": "Chicago Building (芝加哥建筑2)",
+        "CACHIG03": "Chicago Building (芝加哥建筑3)",
+        "CACHIG04": "Chicago Building (芝加哥建筑4)",
+        "CACHIG05": "Chicago Building (芝加哥建筑5)"
+      }
+    },
+    "houses_eastern": {
+      "description": "Eastern/Asian-style buildings",
+      "items": {
+        "CAEAST01": "Eastern Building (东方建筑1)",
+        "CAEAST02": "Eastern Building (东方建筑2)",
+        "CAJAPA01": "Japanese Building (日式建筑1)",
+        "CAJAPA02": "Japanese Building (日式建筑2)",
+        "CAJAPA03": "Japanese Building (日式建筑3)",
+        "CAJAPA04": "Japanese Building (日式建筑4)",
+        "CAJAPA05": "Japanese Building (日式建筑5)",
+        "CAJAPA06": "Japanese Building (日式建筑6)",
+        "CAJAPA07": "Japanese Building (日式建筑7)",
+        "CAJAPA08": "Japanese Building (日式建筑8)",
+        "CAJAPA09": "Japanese Building (日式建筑9)",
+        "CAJAPA10": "Japanese Building (日式建筑10)",
+        "CAJAPA11": "Japanese Building (日式建筑11)"
+      }
+    },
+    "houses_tropical": {
+      "description": "Tropical/Miami-style buildings",
+      "items": {
+        "CAMIAM01": "Miami Building (迈阿密建筑1)",
+        "CAMIAM02": "Miami Building (迈阿密建筑2)",
+        "CAMIAM03": "Miami Building (迈阿密建筑3)",
+        "CAMIAM04": "Miami Building (迈阿密建筑4)",
+        "CAMIAM05": "Miami Building (迈阿密建筑5)",
+        "CAMIAM06": "Miami Building (迈阿密建筑6)",
+        "CAMIAM07": "Miami Building (迈阿密建筑7)"
+      }
+    },
+    "houses_african": {
+      "description": "African/Moroccan-style buildings",
+      "items": {
+        "CAMORR01": "Moroccan Building (摩洛哥建筑1)",
+        "CAMORR02": "Moroccan Building (摩洛哥建筑2)",
+        "CAMORR03": "Moroccan Building (摩洛哥建筑3)",
+        "CAMORR04": "Moroccan Building (摩洛哥建筑4)",
+        "CAMORR05": "Moroccan Building (摩洛哥建筑5)",
+        "CAMORR06": "Moroccan Building (摩洛哥建筑6)",
+        "CAMORR07": "Moroccan Building (摩洛哥建筑7)",
+        "CAMORR08": "Moroccan Building (摩洛哥建筑8)",
+        "CAMORR09": "Moroccan Building (摩洛哥建筑9)",
+        "CAMORR10": "Moroccan Building (摩洛哥建筑10)"
+      }
+    },
+    "farm_rural": {
+      "description": "Farm and rural buildings",
+      "items": {
+        "CAFARM01": "Farm House (农舍1)",
+        "CAFARM02": "Farm House (农舍2)",
+        "CAFARM06": "Farm Building (农场建筑)",
+        "CAFRMA": "Farmhouse A (农庄A)",
+        "CAFRMB": "Farmhouse B (农庄B)",
+        "CABARN02": "Barn (谷仓)",
+        "CAWIND": "Windmill (风车)"
+      }
+    },
+    "city_facilities": {
+      "description": "City infrastructure - parks, stations, etc.",
+      "items": {
+        "CAPARK01": "Park/Garden (公园/花园1)",
+        "CAPARK02": "Park/Garden (公园/花园2)",
+        "CAPARK03": "Park/Garden (公园/花园3)",
+        "CAPARK04": "Parking Lot (停车场4)",
+        "CAPARK05": "Parking Lot (停车场5)",
+        "CAPARK06": "Parking Lot (停车场6)",
+        "CABUNK01": "Civilian Bunker (民用掩体1)",
+        "CABUNK02": "Civilian Bunker (民用掩体2)",
+        "CABUNK03": "Civilian Bunker (民用掩体3)",
+        "CABUNK04": "Civilian Bunker (民用掩体4)",
+        "CABUS01": "Bus Stop (公交站1)",
+        "CABUS02": "Bus Stop (公交站2)",
+        "CATHOSP": "Hospital (医院)",
+        "CABANK": "Bank (银行)",
+        "CASTRF": "Street Furniture (街道设施)",
+        "CAGAS01": "Gas Station (加油站)",
+        "CASTRT05": "Storefront (店面)",
+        "CASTOR": "Store (商店)",
+        "CAACAD": "Academy (学院)",
+        "CATENT02": "Tent (帐篷2)",
+        "CATENT03": "Tent (帐篷3)",
+        "CATENT04": "Tent (帐篷4)",
+        "CATENT05": "Tent (帐篷5)",
+        "CATENT06": "Tent (帐篷6)",
+        "CATENT07": "Tent (帐篷7)"
+      }
+    },
+    "military_deco": {
+      "description": "Military decorative structures",
+      "items": {
+        "CAARMY01": "Army Building (军事建筑1)",
+        "CAARMY02": "Army Building (军事建筑2)",
+        "CAARMY03": "Army Building (军事建筑3)",
+        "CAARMY04": "Army Building (军事建筑4)",
+        "CADEFB": "Defense Barrier (防御屏障)",
+        "CANRCT": "Nuke Reactor (核反应堆装饰)"
+      }
+    },
+    "industrial": {
+      "description": "Industrial buildings and infrastructure",
+      "items": {
+        "CAFUEL": "Fuel Tank (油罐)",
+        "CAPIPE": "Pipe (管道)",
+        "CATPIP": "Pipe Variant (管道变体)",
+        "CAIND01": "Industrial Building (工业建筑1)",
+        "CAINDU01": "Industrial Facility (工业设施1)",
+        "CAINDU02": "Industrial Facility (工业设施2)",
+        "CAINDU03": "Industrial Facility (工业设施3)",
+        "CAINDU05": "Industrial Facility (工业设施5)",
+        "CAINDU06": "Industrial Facility (工业设施6)",
+        "CAINDU07": "Industrial Facility (工业设施7)"
+      }
+    },
+    "animals": {
+      "description": "Animals and wildlife",
+      "items": {
+        "COW": "Cow (奶牛)",
+        "ALL": "Alligator (鳄鱼)",
+        "JOSH": "Monkey (猴子)",
+        "KANGAROO": "Kangaroo (袋鼠)",
+        "LION": "Lion (狮子)",
+        "DEER": "Deer (鹿)",
+        "BISON": "Bison (野牛)",
+        "SHEEP": "Sheep (绵羊)",
+        "TIGER": "Tiger (老虎)",
+        "ELEPHANT": "Elephant (大象)",
+        "TAPIR": "Tapir (貘)",
+        "GBEAR": "Grizzly Bear (灰熊)",
+        "WTIGR": "White Tiger (白虎)",
+        "BEETLE": "Beetle (甲虫)",
+        "CDOG": "Civilian Dog (民用犬)"
+      }
+    },
+    "civilian_vehicles": {
+      "description": "Civilian cars and trucks",
+      "items": {
+        "PTRUCK": "Pickup Truck (皮卡)",
+        "CIV1": "Civilian Car 1 (民用轿车1)",
+        "CIV2": "Civilian Car 2 (民用轿车2)",
+        "CIV3": "Civilian Car 3 (民用轿车3)",
+        "CIV4": "Civilian Car 4 (民用轿车4)",
+        "CIVA": "Civilian Car A (民用轿车A)",
+        "CIVB": "Civilian Car B (民用轿车B)",
+        "CIVC": "Civilian Car C (民用轿车C)",
+        "CAR": "Car (轿车)",
+        "SUV": "SUV (越野车)",
+        "SUVB": "SUV Black (黑色越野车)",
+        "SUVW": "SUV White (白色越野车)",
+        "PICK": "Pickup (小货车)",
+        "JEEP": "Jeep (吉普车)",
+        "STANG": "Mustang (野马跑车)",
+        "TAXI": "Taxi (出租车)",
+        "LIMO": "Limousine (豪华轿车)",
+        "BUS": "Bus (公共汽车)",
+        "AMBU": "Ambulance (救护车)",
+        "COP": "Police Car (警车)",
+        "TRUCKA": "Truck A (卡车A)",
+        "TRUCKB": "Truck B (卡车B)",
+        "FABTRC": "Fabrication Truck (工程车)",
+        "WINI": "Mini Van (小面包车)"
+      }
+    },
+    "washington_landmarks": {
+      "description": "Washington D.C. landmark buildings",
+      "items": {
+        "CAWASH02": "Washington Monument Area",
+        "CAWASH03": "Washington Building 3",
+        "CAWASH04": "Washington Building 4",
+        "CAWASH05": "Washington Building 5",
+        "CAWASH06": "Washington Building 6",
+        "CAWASH07": "Washington Building 7",
+        "CAWASH08": "Washington Building 8",
+        "CAWASH09": "Washington Building 9",
+        "CAWASH10": "Washington Building 10",
+        "CAWASH11": "Washington Building 11",
+        "CAWASH18": "Washington Building 18",
+        "CAWASH19": "Washington Building 19"
+      }
+    },
+    "paris_landmarks": {
+      "description": "Paris landmark buildings",
+      "items": {
+        "CAPARS04": "Paris Building 4",
+        "CAPARS05": "Paris Building 5",
+        "CAPARS06": "Paris Building 6",
+        "CAPARS07": "Paris Building 7",
+        "CAPARS08": "Paris Building 8",
+        "CAPARS10": "Paris Building 10",
+        "CAPARS13": "Paris Building 13",
+        "CAPARS14": "Paris Building 14"
+      }
+    },
+    "san_francisco": {
+      "description": "San Francisco buildings",
+      "items": {
+        "CASANF02": "San Francisco Building 2",
+        "CASANF15": "San Francisco Building 15",
+        "CASANF16": "San Francisco Building 16",
+        "CASANF17": "San Francisco Building 17",
+        "CASANF18": "San Francisco Building 18"
+      }
+    }
+  }
+}
