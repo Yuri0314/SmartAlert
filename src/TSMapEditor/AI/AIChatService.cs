@@ -355,8 +355,8 @@ namespace TSMapEditor.AI
 5. 调用 set_spawn_point 设置所有出生点
 6. 调用 place_ore 放置矿石（必须在出生点设置之后！）
 7. 调用 draw_road 修建道路
-8. 调用 place_trees / fill_terrain 装饰
-9. 调用 place_decorations 散布装饰物（油桶、小屋、围墙等）增加生活感
+8. 调用 place_trees / fill_terrain 装饰（远离出生点）
+9. 调用 place_decorations 少量散布装饰物（仅在远离出生点的区域，密度用sparse）
 
 === 2v2 对战地图布局参考 ===
 出生点分布（对角对称）：
@@ -368,6 +368,11 @@ namespace TSMapEditor.AI
 === 1v1 对战地图布局参考 ===
 - 玩家1: x_pct=20, y_pct=20
 - 玩家2: x_pct=80, y_pct=80
+
+=== 基地空间规则（极其重要）===
+- 每个出生点周围必须留出足够空旷的空间供玩家展开基地（至少12格半径内不放装饰物和树木）
+- 树木和装饰物只放在地图的公共区域（中间、边缘），绝对不要堆在出生点附近
+- 装饰物默认用 sparse 密度，除非用户明确要求密集
 
 === 矿石放置规则（极其重要）===
 - 每个出生点旁边放 1-2 片矿石

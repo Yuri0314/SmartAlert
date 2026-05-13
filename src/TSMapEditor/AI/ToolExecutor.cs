@@ -484,11 +484,20 @@ namespace TSMapEditor.AI
 
             float densityValue = density switch
             {
-                "sparse" => 0.05f,
-                "medium" => 0.10f,
-                "dense" => 0.18f,
-                _ => 0.10f
+                "sparse" => 0.02f,
+                "medium" => 0.04f,
+                "dense" => 0.08f,
+                _ => 0.04f
             };
+
+            // Build spawn point exclusion zones (larger radius for decorations)
+            const int spawnExclusionRadius = 12;
+            var spawnPoints = new List<Point2D>();
+            foreach (var wp in map.Waypoints)
+            {
+                if (wp.Identifier >= 0 && wp.Identifier <= 7)
+                    spawnPoints.Add(wp.Position);
+            }
 
             var random = new Random();
             int r2 = radius * radius;
@@ -521,6 +530,19 @@ namespace TSMapEditor.AI
                         continue;
 
                     if (random.NextDouble() > densityValue)
+                        continue;
+
+                    // Skip cells near spawn points — leave room for base expansion
+                    bool nearSpawn = false;
+                    foreach (var sp in spawnPoints)
+                    {
+                        if (Math.Abs(x - sp.X) + Math.Abs(y - sp.Y) <= spawnExclusionRadius)
+                        {
+                            nearSpawn = true;
+                            break;
+                        }
+                    }
+                    if (nearSpawn)
                         continue;
 
                     var cell = map.GetTile(x, y);
@@ -571,13 +593,13 @@ namespace TSMapEditor.AI
 
             return theaterName switch
             {
-                "SNOW" => new[] { "CABARR01", "CABARR02", "CAWALL", "CAMISC05", "CAMSC08", "CAMSC09", "SNODUSLAMP" },
-                "URBAN" => new[] { "CABARR01", "CAWALL", "NEGLAMP", "CAMISC03", "CAMSC07", "CAMSC08", "CAPARK01" },
-                "NEWURBAN" => new[] { "CABARR01", "CAWALL", "INYELWLAMP", "CAMISC05", "CAMSC06", "CAMSC08", "CAMSC09" },
-                "DESERT" => new[] { "CABARR01", "CABARR02", "CAWALL", "INGALITE", "CAMISC05", "CAMSC07" },
-                "LUNAR" => new[] { "CABARR01", "CAMISC05", "CAMSC08" },
-                // TEMPERATE: barrels, fences, lamps, misc objects, farm
-                _ => new[] { "CABARR01", "CABARR02", "CAWALL", "NEGLAMP", "CAMISC05", "CAMSC08", "CAFARM02" }
+                "SNOW" => new[] { "CABARR01", "CABARR02", "CAWALL", "SNODUSLAMP" },
+                "URBAN" => new[] { "CABARR01", "CAWALL", "NEGLAMP", "CAPARK01" },
+                "NEWURBAN" => new[] { "CABARR01", "CAWALL", "INYELWLAMP" },
+                "DESERT" => new[] { "CABARR01", "CABARR02", "CAWALL", "INGALITE" },
+                "LUNAR" => new[] { "CABARR01" },
+                // TEMPERATE: barrels, fences, lamps
+                _ => new[] { "CABARR01", "CABARR02", "CAWALL", "NEGLAMP" }
             };
         }
 
