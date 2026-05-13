@@ -379,7 +379,35 @@ namespace TSMapEditor.AI
                 $"放置{type}矿");
             mutationManager.PerformMutation(mutation);
 
-            return $"✓ 已在 {GetPositionDescription(args)} 放置{amount}{(type == "gems" ? "宝石" : "矿石")}";
+            // Auto-place an Ore Mine (CAMINE) at the center of the ore field
+            // This building continuously regenerates ore for players to harvest
+            string minePlaced = "";
+            var mineType = map.Rules.BuildingTypes.Find(b =>
+                b.ININame.Equals("CAMINE", StringComparison.OrdinalIgnoreCase)) ??
+                map.Rules.BuildingTypes.Find(b =>
+                b.ININame.Equals("CAMINE01", StringComparison.OrdinalIgnoreCase));
+            if (mineType != null)
+            {
+                var neutralOwner = ResolveOwner("Neutral");
+                if (neutralOwner != null)
+                {
+                    var cell = map.GetTile(pos.X, pos.Y);
+                    if (cell != null && cell.Structures.Count == 0)
+                    {
+                        var mine = new Structure(mineType)
+                        {
+                            Position = new Point2D(pos.X, pos.Y),
+                            Owner = neutralOwner,
+                            HP = 256
+                        };
+                        map.PlaceBuilding(mine);
+                        mutationTarget.InvalidateMap();
+                        minePlaced = " + 矿井";
+                    }
+                }
+            }
+
+            return $"✓ 已在 {GetPositionDescription(args)} 放置{amount}{(type == "gems" ? "宝石" : "矿石")}{minePlaced}";
         }
 
         private string ExecutePlaceTrees(JsonElement args)
