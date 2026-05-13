@@ -686,11 +686,47 @@ namespace TSMapEditor.AI
                     }
                 }
 
-                Logger.Log($"ToolExecutor: Loaded {unitReference.Count} unit references");
+                Logger.Log($"ToolExecutor: Loaded {unitReference.Count} unit references from JSON");
             }
             catch (Exception ex)
             {
                 Logger.Log($"ToolExecutor: Failed to load unit_reference.json: {ex.Message}");
+            }
+
+            // Enrich with actual game data — these have real Name= values
+            // from the game's rulesmd.ini, which are authoritative
+            try
+            {
+                int enriched = 0;
+                foreach (var bt in map.Rules.BuildingTypes)
+                {
+                    if (!unitReference.ContainsKey(bt.ININame) && !string.IsNullOrEmpty(bt.Name))
+                    {
+                        unitReference[bt.ININame] = bt.Name;
+                        enriched++;
+                    }
+                }
+                foreach (var vt in map.Rules.UnitTypes)
+                {
+                    if (!unitReference.ContainsKey(vt.ININame) && !string.IsNullOrEmpty(vt.Name))
+                    {
+                        unitReference[vt.ININame] = vt.Name;
+                        enriched++;
+                    }
+                }
+                foreach (var it in map.Rules.InfantryTypes)
+                {
+                    if (!unitReference.ContainsKey(it.ININame) && !string.IsNullOrEmpty(it.Name))
+                    {
+                        unitReference[it.ININame] = it.Name;
+                        enriched++;
+                    }
+                }
+                Logger.Log($"ToolExecutor: Enriched with {enriched} game data entries, total {unitReference.Count}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"ToolExecutor: Failed to enrich from game data: {ex.Message}");
             }
         }
 
