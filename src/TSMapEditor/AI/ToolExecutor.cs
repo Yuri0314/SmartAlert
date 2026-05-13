@@ -541,8 +541,23 @@ namespace TSMapEditor.AI
         }
 
         /// <summary>
-        /// Returns theater-appropriate decoration building INI names.
+        /// Returns theater-appropriate PURE DECORATION building INI names.
         /// Data derived from analyzing 720 official Mental Omega standard maps.
+        /// 
+        /// EXCLUDED (functional buildings that must NOT be scattered):
+        ///   CAOILD = Oil Derrick (capturable, generates money)
+        ///   CABHUT = Bridge Repair Hut (must be near bridges)
+        ///   CAHOSP = Hospital (capturable tech building)
+        ///   CAAIRP = Airport (capturable tech building)
+        ///   CAPOWR = Power Plant (capturable tech building)
+        ///   
+        /// INCLUDED (safe pure-decoration objects):
+        ///   CABARR01/02 = Barrels/crates
+        ///   CAWALL = Fence segments
+        ///   NEGLAMP/INGALITE/INYELWLAMP/SNODUSLAMP/TEMDUSLAMP = Street lamps
+        ///   CAMISC03/04/05 = Misc decorative objects (poles, signs)
+        ///   CAMSC06/07/08/09 = Small misc objects
+        ///   CAFARM02 = Farm buildings
         /// </summary>
         private string[] GetTheaterDecorations()
         {
@@ -550,18 +565,13 @@ namespace TSMapEditor.AI
 
             return theaterName switch
             {
-                // SNOW: oil drums, huts, walls, barrels
-                "SNOW" => new[] { "CAOILD", "CABHUT", "CAWALL", "CABARR01", "CAMISC05" },
-                // URBAN: walls, oil drums, parks, huts, street lamps
-                "URBAN" => new[] { "CAWALL", "CAOILD", "CABHUT", "CAPARK01", "NEGLAMP" },
-                // NEWURBAN: oil drums, huts, parks, lamps
-                "NEWURBAN" => new[] { "CAOILD", "CABHUT", "CAMISC05", "CAPARK01", "INYELWLAMP" },
-                // DESERT: oil drums, walls, barrels
-                "DESERT" => new[] { "CAOILD", "CAWALL", "CABARR01", "CABARR02", "CAMISC05" },
-                // LUNAR: minimal decoration
-                "LUNAR" => new[] { "CAOILD", "CAMISC05" },
-                // TEMPERATE: oil drums, huts, walls, barrels
-                _ => new[] { "CAOILD", "CABHUT", "CAWALL", "CABARR01", "CAMISC05" }
+                "SNOW" => new[] { "CABARR01", "CABARR02", "CAWALL", "CAMISC05", "CAMSC08", "CAMSC09", "SNODUSLAMP" },
+                "URBAN" => new[] { "CABARR01", "CAWALL", "NEGLAMP", "CAMISC03", "CAMSC07", "CAMSC08", "CAPARK01" },
+                "NEWURBAN" => new[] { "CABARR01", "CAWALL", "INYELWLAMP", "CAMISC05", "CAMSC06", "CAMSC08", "CAMSC09" },
+                "DESERT" => new[] { "CABARR01", "CABARR02", "CAWALL", "INGALITE", "CAMISC05", "CAMSC07" },
+                "LUNAR" => new[] { "CABARR01", "CAMISC05", "CAMSC08" },
+                // TEMPERATE: barrels, fences, lamps, misc objects, farm
+                _ => new[] { "CABARR01", "CABARR02", "CAWALL", "NEGLAMP", "CAMISC05", "CAMSC08", "CAFARM02" }
             };
         }
 
