@@ -26,6 +26,7 @@ namespace TSMapEditor.AI
             SetSpawnPoint,
             PlaceOre,
             PlaceTrees,
+            PlaceDecorations,
             ClearArea,
             SetMapName,
         };
@@ -50,9 +51,9 @@ namespace TSMapEditor.AI
                 ["position"] = PropEnum("填充区域的中心位置", PositionEnum),
                 ["x_pct"] = PropInt("中心X百分比(0=最左,100=最右)", 0, 100),
                 ["y_pct"] = PropInt("中心Y百分比(0=最上,100=最下)", 0, 100),
-                ["terrain"] = PropEnum("地形类型", new[]
+                ["terrain"] = PropEnum("地形类型（也可使用 get_map_info 返回的可用地面类型名称）", new[]
                 {
-                    "grass", "dark_grass", "rough_grass", "sand", "pavement"
+                    "grass", "dark_grass", "rough_grass", "sand", "pavement", "snow", "ice"
                 }),
                 ["scope"] = PropEnum("填充范围", new[]
                 {
@@ -175,6 +176,20 @@ namespace TSMapEditor.AI
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["density"] = PropEnum("树木密度", new[] { "sparse", "medium", "dense" }),
             })
+        };
+
+        public static ToolDefinition PlaceDecorations => new ToolDefinition
+        {
+            Name = "place_decorations",
+            Description = "在指定区域自动散布装饰物（油桶、小屋、围墙、路灯等民用建筑）。装饰物类型自动匹配当前场景。用于让地图更有生活感。",
+            Parameters = Schema(new Dictionary<string, object>
+            {
+                ["position"] = PropEnum("装饰区域中心位置", PositionEnum),
+                ["x_pct"] = PropInt("X百分比", 0, 100),
+                ["y_pct"] = PropInt("Y百分比", 0, 100),
+                ["density"] = PropEnum("装饰密度", new[] { "sparse", "medium", "dense" }),
+                ["radius"] = PropInt("散布半径(格数)", 3, 20),
+            }, required: new[] { "density" })
         };
 
         public static ToolDefinition ClearArea => new ToolDefinition

@@ -356,6 +356,7 @@ namespace TSMapEditor.AI
 6. 调用 place_ore 放置矿石（必须在出生点设置之后！）
 7. 调用 draw_road 修建道路
 8. 调用 place_trees / fill_terrain 装饰
+9. 调用 place_decorations 散布装饰物（油桶、小屋、围墙等）增加生活感
 
 === 2v2 对战地图布局参考 ===
 出生点分布（对角对称）：

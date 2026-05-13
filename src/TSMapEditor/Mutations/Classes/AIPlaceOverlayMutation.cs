@@ -7,30 +7,44 @@ using TSMapEditor.UI;
 namespace TSMapEditor.Mutations.Classes
 {
     /// <summary>
-    /// A mutation that places overlay (e.g., tiberium/ore) in a rectangular area.
-    /// Unlike WAE's PlaceOverlayMutation, this does not depend on BrushSize
-    /// and works on a specified rectangular region directly.
+    /// A mutation that places overlay (e.g., tiberium/ore) in a circular area with density control.
+    /// Automatically excludes spawn point zones to prevent base deployment issues.
     /// </summary>
     public class AIPlaceOverlayMutation : Mutation
     {
+        /// <summary>
+        /// Circular placement constructor (preferred).
+        /// </summary>
         public AIPlaceOverlayMutation(IMutationTarget mutationTarget,
-            OverlayType overlayType, int startX, int startY,
-            int width, int height, string description)
+            OverlayType overlayType, int centerX, int centerY,
+            int radius, float density, string description)
             : base(mutationTarget)
         {
             this.overlayType = overlayType;
-            this.startX = startX;
-            this.startY = startY;
-            this.width = width;
-            this.height = height;
+            this.centerX = centerX;
+            this.centerY = centerY;
+            this.radius = Math.Max(1, radius);
+            this.density = Math.Max(0.3f, Math.Min(1.0f, density));
             this.description = description;
         }
 
+        /// <summary>
+        /// Legacy rectangular constructor — converts to circular parameters.
+        /// </summary>
+        public AIPlaceOverlayMutation(IMutationTarget mutationTarget,
+            OverlayType overlayType, int startX, int startY,
+            int width, int height, string description)
+            : this(mutationTarget, overlayType,
+                  startX + width / 2, startY + height / 2,
+                  Math.Max(width, height) / 2, 0.7f, description)
+        {
+        }
+
         private readonly OverlayType overlayType;
-        private readonly int startX;
-        private readonly int startY;
-        private readonly int width;
-        private readonly int height;
+        private readonly int centerX;
+        private readonly int centerY;
+        private readonly int radius;
+        private readonly float density;
         private readonly string description;
 
         // Undo data: stores original overlay state for each modified cell
@@ -39,7 +53,7 @@ namespace TSMapEditor.Mutations.Classes
         public override string GetDisplayString()
         {
             return string.IsNullOrEmpty(description)
-                ? $"AI: Place {overlayType.ININame} at ({startX},{startY}) {width}x{height}"
+                ? $"AI: Place {overlayType.ININame} at ({centerX},{centerY}) r={radius}"
                 : $"AI: {description}";
         }
 
@@ -47,6 +61,8 @@ namespace TSMapEditor.Mutations.Classes
         {
             undoData = new List<OriginalOverlayData>();
             var map = MutationTarget.Map;
+            var random = new Random();
+            int r2 = radius * radius;
 
             // Build spawn point exclusion zones (waypoints 0-7 = player spawn points)
             const int spawnExclusionRadius = 5;
@@ -57,15 +73,27 @@ namespace TSMapEditor.Mutations.Classes
                     spawnPoints.Add(wp.Position);
             }
 
-            for (int y = startY; y < startY + height; y++)
+            for (int y = centerY - radius; y <= centerY + radius; y++)
             {
-                for (int x = startX; x < startX + width; x++)
+                for (int x = centerX - radius; x <= centerX + radius; x++)
                 {
+                    // Circular boundary check
+                    int dx = x - centerX;
+                    int dy = y - centerY;
+                    if (dx * dx + dy * dy > r2)
+                        continue;
+
+                    // Density check — edges are sparser for natural look
+                    double distRatio = Math.Sqrt(dx * dx + dy * dy) / radius;
+                    double effectiveDensity = density * (1.0 - 0.4 * distRatio); // Denser center, sparser edges
+                    if (random.NextDouble() > effectiveDensity)
+                        continue;
+
                     var cell = map.GetTile(x, y);
                     if (cell == null)
                         continue;
 
-                    // Skip cells near spawn points to prevent base deployment issues
+                    // Skip cells near spawn points
                     bool nearSpawn = false;
                     foreach (var sp in spawnPoints)
                     {
@@ -76,6 +104,10 @@ namespace TSMapEditor.Mutations.Classes
                         }
                     }
                     if (nearSpawn)
+                        continue;
+
+                    // Skip cells that already have terrain objects (trees, rocks)
+                    if (cell.TerrainObject != null)
                         continue;
 
                     // Save original overlay for undo
@@ -99,9 +131,9 @@ namespace TSMapEditor.Mutations.Classes
             // Update frame indices for tiberium smoothing
             if (overlayType.Tiberium)
             {
-                for (int y = startY - 1; y <= startY + height; y++)
+                for (int y = centerY - radius - 1; y <= centerY + radius + 1; y++)
                 {
-                    for (int x = startX - 1; x <= startX + width; x++)
+                    for (int x = centerX - radius - 1; x <= centerX + radius + 1; x++)
                     {
                         var cell = map.GetTile(x, y);
                         if (cell?.Overlay != null)
@@ -146,9 +178,9 @@ namespace TSMapEditor.Mutations.Classes
             // Re-smooth tiberium after undo
             if (overlayType.Tiberium)
             {
-                for (int y = startY - 1; y <= startY + height; y++)
+                for (int y = centerY - radius - 1; y <= centerY + radius + 1; y++)
                 {
-                    for (int x = startX - 1; x <= startX + width; x++)
+                    for (int x = centerX - radius - 1; x <= centerX + radius + 1; x++)
                     {
                         var cell = map.GetTile(x, y);
                         if (cell?.Overlay != null)

@@ -58,6 +58,7 @@ namespace TSMapEditor.AI
                     "set_spawn_point" => ExecuteSetSpawnPoint(args),
                     "place_ore" => ExecutePlaceOre(args),
                     "place_trees" => ExecutePlaceTrees(args),
+                    "place_decorations" => ExecutePlaceDecorations(args),
                     "clear_area" => ExecuteClearArea(args),
                     "set_map_name" => ExecuteSetMapName(args),
                     _ => $"❌ 未知工具: {toolName}"
@@ -461,6 +462,107 @@ namespace TSMapEditor.AI
             mutationManager.PerformMutation(mutation);
 
             return $"✓ 已清除 {GetPositionDescription(args)} 半径{radius}的区域";
+        }
+
+        private string ExecutePlaceDecorations(JsonElement args)
+        {
+            var pos = ResolvePosition(args);
+            string density = args.TryGetString("density") ?? "medium";
+            int radius = args.TryGetInt("radius") ?? 8;
+            radius = Math.Max(3, Math.Min(20, radius));
+
+            // Get theater-appropriate decoration buildings
+            var decoNames = GetTheaterDecorations();
+            if (decoNames.Length == 0)
+                return "❌ 当前场景没有可用的装饰物";
+
+            float densityValue = density switch
+            {
+                "sparse" => 0.05f,
+                "medium" => 0.10f,
+                "dense" => 0.18f,
+                _ => 0.10f
+            };
+
+            var random = new Random();
+            int r2 = radius * radius;
+            int placedCount = 0;
+
+            // Resolve building types
+            var buildingTypes = new List<BuildingType>();
+            foreach (var name in decoNames)
+            {
+                var bt = map.Rules.BuildingTypes.Find(b =>
+                    b.ININame.Equals(name, StringComparison.OrdinalIgnoreCase));
+                if (bt != null)
+                    buildingTypes.Add(bt);
+            }
+
+            if (buildingTypes.Count == 0)
+                return "❌ 找不到装饰物建筑类型";
+
+            House neutralOwner = ResolveOwner("Neutral");
+            if (neutralOwner == null)
+                return "❌ 找不到 Neutral 所属方";
+
+            for (int y = pos.Y - radius; y <= pos.Y + radius; y++)
+            {
+                for (int x = pos.X - radius; x <= pos.X + radius; x++)
+                {
+                    int dx = x - pos.X;
+                    int dy = y - pos.Y;
+                    if (dx * dx + dy * dy > r2)
+                        continue;
+
+                    if (random.NextDouble() > densityValue)
+                        continue;
+
+                    var cell = map.GetTile(x, y);
+                    if (cell == null || cell.TerrainObject != null ||
+                        cell.Structures.Count > 0 || cell.Vehicles.Count > 0)
+                        continue;
+
+                    var chosenType = buildingTypes[random.Next(buildingTypes.Count)];
+                    var structure = new Structure(chosenType)
+                    {
+                        Position = new Point2D(x, y),
+                        Owner = neutralOwner,
+                        Facing = (byte)(random.Next(8) * 32),
+                        HP = 256
+                    };
+
+                    map.PlaceBuilding(structure);
+                    placedCount++;
+                }
+            }
+
+            mutationTarget.InvalidateMap();
+            return $"✓ 已在 {GetPositionDescription(args)} 放置{placedCount}个装饰物";
+        }
+
+        /// <summary>
+        /// Returns theater-appropriate decoration building INI names.
+        /// Data derived from analyzing 720 official Mental Omega standard maps.
+        /// </summary>
+        private string[] GetTheaterDecorations()
+        {
+            string theaterName = (map.LoadedTheaterName ?? map.TheaterName ?? "").ToUpperInvariant();
+
+            return theaterName switch
+            {
+                // SNOW: oil drums, huts, walls, barrels
+                "SNOW" => new[] { "CAOILD", "CABHUT", "CAWALL", "CABARR01", "CAMISC05" },
+                // URBAN: walls, oil drums, parks, huts, street lamps
+                "URBAN" => new[] { "CAWALL", "CAOILD", "CABHUT", "CAPARK01", "NEGLAMP" },
+                // NEWURBAN: oil drums, huts, parks, lamps
+                "NEWURBAN" => new[] { "CAOILD", "CABHUT", "CAMISC05", "CAPARK01", "INYELWLAMP" },
+                // DESERT: oil drums, walls, barrels
+                "DESERT" => new[] { "CAOILD", "CAWALL", "CABARR01", "CABARR02", "CAMISC05" },
+                // LUNAR: minimal decoration
+                "LUNAR" => new[] { "CAOILD", "CAMISC05" },
+                // TEMPERATE: oil drums, huts, walls, barrels
+                _ => new[] { "CAOILD", "CABHUT", "CAWALL", "CABARR01", "CAMISC05" }
+            };
         }
 
         private string ExecuteSetMapName(JsonElement args)
