@@ -48,6 +48,7 @@ namespace TSMapEditor.AI
         {
             try
             {
+                Logger.Log($"ToolExecutor: {toolName}({argumentsJson})");
                 using var doc = JsonDocument.Parse(argumentsJson);
                 var args = doc.RootElement;
 
@@ -379,31 +380,23 @@ namespace TSMapEditor.AI
                 $"放置{type}矿");
             mutationManager.PerformMutation(mutation);
 
-            // Auto-place an Ore Mine (CAMINE) at the center of the ore field
-            // This building continuously regenerates ore for players to harvest
+            // Auto-place an Ore Mine drill (TIBTRE01) at the center of the ore field
+            // TIBTRE01 is a terrain object that continuously regenerates ore for players to harvest
+            // Used 6258 times across 720 official MO maps
             string minePlaced = "";
-            var mineType = map.Rules.BuildingTypes.Find(b =>
-                b.ININame.Equals("CAMINE04", StringComparison.OrdinalIgnoreCase)) ??
-                map.Rules.BuildingTypes.Find(b =>
-                b.ININame.Equals("CAMINE03", StringComparison.OrdinalIgnoreCase));
-            if (mineType != null)
+            var oreMineType = map.Rules.TerrainTypes.Find(t =>
+                t.ININame.Equals("TIBTRE01", StringComparison.OrdinalIgnoreCase)) ??
+                map.Rules.TerrainTypes.Find(t =>
+                t.ININame.Equals("TIBTRE02", StringComparison.OrdinalIgnoreCase));
+            if (oreMineType != null)
             {
-                var neutralOwner = ResolveOwner("Neutral");
-                if (neutralOwner != null)
+                var cell = map.GetTile(pos.X, pos.Y);
+                if (cell != null && cell.TerrainObject == null)
                 {
-                    var cell = map.GetTile(pos.X, pos.Y);
-                    if (cell != null && cell.Structures.Count == 0)
-                    {
-                        var mine = new Structure(mineType)
-                        {
-                            Position = new Point2D(pos.X, pos.Y),
-                            Owner = neutralOwner,
-                            HP = 256
-                        };
-                        map.PlaceBuilding(mine);
-                        mutationTarget.InvalidateMap();
-                        minePlaced = " + 矿井";
-                    }
+                    var terrainObj = new TerrainObject(oreMineType, new Point2D(pos.X, pos.Y));
+                    map.AddTerrainObject(terrainObj);
+                    mutationTarget.InvalidateMap();
+                    minePlaced = " + 生矿机";
                 }
             }
 
