@@ -383,9 +383,9 @@ namespace TSMapEditor.AI
             // This building continuously regenerates ore for players to harvest
             string minePlaced = "";
             var mineType = map.Rules.BuildingTypes.Find(b =>
-                b.ININame.Equals("CAMINE", StringComparison.OrdinalIgnoreCase)) ??
+                b.ININame.Equals("CAMINE04", StringComparison.OrdinalIgnoreCase)) ??
                 map.Rules.BuildingTypes.Find(b =>
-                b.ININame.Equals("CAMINE01", StringComparison.OrdinalIgnoreCase));
+                b.ININame.Equals("CAMINE03", StringComparison.OrdinalIgnoreCase));
             if (mineType != null)
             {
                 var neutralOwner = ResolveOwner("Neutral");
