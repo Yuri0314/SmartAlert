@@ -177,8 +177,14 @@ namespace TSMapEditor.UI
         private bool IsCursorInResizeHandle()
         {
             var cursor = GetCursorPoint();
-            return cursor.X >= Width - ResizeHandleSize && cursor.X <= Width &&
-                   cursor.Y >= Height - ResizeHandleSize && cursor.Y <= Height;
+            // Must be in the bottom-right corner area
+            if (cursor.X < Width - ResizeHandleSize || cursor.Y < Height - ResizeHandleSize)
+                return false;
+            // Exclude the Send button area to avoid click conflicts
+            if (cursor.X >= btnSend.X && cursor.X <= btnSend.X + btnSend.Width &&
+                cursor.Y >= btnSend.Y && cursor.Y <= btnSend.Y + btnSend.Height)
+                return false;
+            return true;
         }
 
         public override void OnMouseLeftDown(InputEventArgs inputEventArgs)
