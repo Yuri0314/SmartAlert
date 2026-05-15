@@ -149,8 +149,8 @@ namespace TSMapEditor.AI
             string terrain = args.GetProperty("terrain").GetString();
             string scope = args.GetProperty("scope").GetString();
 
-            // Map common shorthand names to tileset names (legacy support)
-            // AI can also pass tileset names directly from get_map_info's asset list
+            // Map shorthand names to LAT tileset names (fill_terrain only handles LAT ground types)
+            // For non-LAT tile sets (cliffs, shores, etc.), use the place_tile tool instead
             string tileSetName = terrain switch
             {
                 "grass" => "Lat Grass",
@@ -160,12 +160,21 @@ namespace TSMapEditor.AI
                 "pavement" => "LAT Pavement",
                 "snow" => "LAT Snow",
                 "ice" => "Ice",
-                _ => terrain  // Pass through — allows AI to use any tileset name directly
+                _ => null  // Unknown terrain type
             };
+
+            if (tileSetName == null)
+            {
+                // Check if user is trying to use a non-LAT tileset name
+                int checkIdx = FindTileIndexByName(terrain);
+                if (checkIdx >= 0)
+                    return $"X fill_terrain 只支持 LAT 地面类型。要放置 {terrain}，请改用 place_tile 工具。";
+                return $"X 未知地形类型: {terrain}。可用类型: grass, dark_grass, rough_grass, sand, pavement, snow, ice";
+            }
 
             int tileIndex = FindTileIndexByName(tileSetName);
             if (tileIndex < 0)
-                return $"❌ 找不到地形类型: {tileSetName}";
+                return $"X 找不到地形类型: {tileSetName}";
 
             // Determine area based on scope
             int center = positionResolver.Center;

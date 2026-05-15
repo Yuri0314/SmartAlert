@@ -47,7 +47,7 @@ namespace TSMapEditor.AI
         public static ToolDefinition FillTerrain => new ToolDefinition
         {
             Name = "fill_terrain",
-            Description = "用指定地形类型填充一个区域。常用于铺设基础草地或局部地形变化。",
+            Description = "用指定的LAT地面类型填充一个区域。仅支持基础地面(草地/沙地/雪地/路面等)。要放置悬崖、海岸线等装饰地块，请用 place_tile。",
             Parameters = Schema(new Dictionary<string, object>
             {
                 ["position"] = PropEnum("填充区域的中心位置", PositionEnum),
