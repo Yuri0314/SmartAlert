@@ -377,7 +377,7 @@ namespace TSMapEditor.AI
                 $"清除出生点{playerIndex + 1}周围障碍物");
             mutationManager.PerformMutation(clearMutation);
 
-            return $"✓ 已设置玩家{playerIndex + 1}出生点在 {GetPositionDescription(args)}（已自动清除周围障碍物）";
+            return $"✓ 已设置玩家{playerIndex + 1}出生点在 {GetPositionDescription(args)}（已自动清除周围障碍物）\n{GetMapStateSummary()}";
         }
 
         private string ExecutePlaceOre(JsonElement args)
@@ -434,7 +434,7 @@ namespace TSMapEditor.AI
                 }
             }
 
-            return $"✓ 已在 {GetPositionDescription(args)} 放置{amount}{(type == "gems" ? "宝石" : "矿石")}{minePlaced}";
+            return $"✓ 已在 {GetPositionDescription(args)} 放置{amount}{(type == "gems" ? "宝石" : "矿石")}{minePlaced}\n{GetMapStateSummary()}";
         }
 
         private string ExecutePlaceTrees(JsonElement args)
@@ -805,6 +805,28 @@ namespace TSMapEditor.AI
             int? yPct = args.TryGetInt($"{prefix}_y_pct");
             if (xPct.HasValue && yPct.HasValue) return $"({xPct}%,{yPct}%)";
             return "center";
+        }
+
+        /// <summary>
+        /// Returns a brief map state summary that is appended to tool results.
+        /// This gives the AI real-time awareness of what has been placed on the map.
+        /// </summary>
+        private string GetMapStateSummary()
+        {
+            int spawnCount = map.Waypoints.Count(wp => wp.Identifier >= 0 && wp.Identifier <= 7);
+            var spawnDetails = new List<string>();
+            for (int i = 0; i <= 7; i++)
+            {
+                var wp = map.Waypoints.FirstOrDefault(w => w.Identifier == i);
+                if (wp != null && wp.Position.X >= 0)
+                    spawnDetails.Add($"P{i + 1}✓");
+            }
+
+            string spawnStatus = spawnCount > 0
+                ? $"出生点: {string.Join(" ", spawnDetails)} ({spawnCount}个)"
+                : "出生点: 无";
+
+            return $"[当前地图状态] {spawnStatus}";
         }
         // ─── Tile Set Placement ──────────────────────────────────────
 

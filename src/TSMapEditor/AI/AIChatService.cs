@@ -46,6 +46,8 @@ namespace TSMapEditor.AI
         private readonly ManualResetEventSlim toolResultsReady = new ManualResetEventSlim(false);
 
         private const int MaxAgentIterations = 30;
+        private const int MaxHistoryMessages = 40;             // Sliding window to prevent token overflow
+        private string lastUserMessage;                        // For quality checker player count detection
 
         /// <summary>
         /// Event raised when the AI sends a text response.
@@ -165,6 +167,9 @@ namespace TSMapEditor.AI
                     pendingFinalMessage = null;
                     agentState = AgentState.Idle;
 
+                    // Run programmatic quality checks before declaring completion
+                    RunQualityChecks();
+
                     chatHistory.Add(ChatMessage.Assistant(message));
                     MessageReceived?.Invoke(this, message);
                     IsBusy = false;
@@ -230,7 +235,11 @@ namespace TSMapEditor.AI
                 return;
             }
 
+            lastUserMessage = userMessage;
             chatHistory.Add(ChatMessage.User(userMessage));
+
+            // Trim history to prevent token overflow (sliding window)
+            TrimHistory();
 
             IsBusy = true;
             BusyStateChanged?.Invoke(this, true);
@@ -344,95 +353,51 @@ namespace TSMapEditor.AI
 
             return $@"你是 SmartAlert 地图编辑器的 AI 助手，帮助用户编辑红色警戒2/尤里的复仇(Mental Omega mod)的地图。
 
-=== 最重要的规则：判断用户意图 ===
-- 你只处理地图编辑相关的请求（如 生成地图、放树、铺草地、设置出生点 等）。
-- 如果用户发送的内容与地图编辑无关（如闲聊、打招呼、问天气等），不要调用任何工具，直接回复：我是地图编辑助手，只能帮你编辑地图。试试说""生成一张2人对战地图""或""在地图中间放5棵树""吧！
-- 如果不确定用户的意图，也不要调用工具，先用文字询问确认。
+=== 意图判断 ===
+- 你只处理地图编辑相关的请求。
+- 非地图请求（闲聊等），不调用工具，直接回复：我是地图编辑助手，只能帮你编辑地图。试试说""生成一张2人对战地图""或""在地图中间放5棵树""吧！
+- 不确定意图时，先用文字询问确认。
 
-你可以通过调用工具来编辑地图。每次调用工具后，你会收到执行结果。根据结果决定下一步操作。
 当前场景: {theaterName}
+每次工具执行后你会收到执行结果和当前地图状态，根据这些信息决定下一步操作。
 
-=== 严格操作顺序（生成完整地图时必须全部执行）===
-1. 调用 get_map_info 了解地图尺寸和可用素材
-2. 调用 set_map_name 命名地图（起一个有创意的英文名）
-3. 铺设基础地形（必须混合多种地面！）：
-   - 先用 fill_terrain scope=full_map 铺满主地形（如 grass）
-   - 再用 fill_terrain scope=medium_patch/large_patch 在 3-5 个不同位置铺设变化地形（如 dark_grass, rough_grass, sand）
-   - 目标：地面不能是单一颜色，必须有层次感
-4. 创建地形高度变化（至少 1-2 个高地）：
-   - 用 create_plateau 在地图中央或关键路口创建高地
-   - 可在其他位置再创建 1-2 个小高地增加战术多样性
-5. 设置所有出生点（必须全部设置！2人=2个，4人=4个）：
-   - 逐个调用 set_spawn_point，不能遗漏任何一个
-6. 放置矿石（每个出生点旁必须放 1-2 片！）：
-   - 逐个为每个出生点旁放矿石，偏移量 5-8%
-7. 修建道路（至少 2 条）：
-   - 每个出生点到中央各一条路
-   - 可选：出生点之间的对角路
-8. 装饰树木（至少 4-6 片，分散在不同位置）：
-   - 在地图四边、中间空地等位置分散放置
-   - 远离出生点（至少 15% 距离）
-9. 少量散布装饰物：
-   - place_decorations 密度用 sparse，远离出生点
+=== 设计原则（不是步骤！自由发挥，但遵守原则）===
 
-=== 质量检查（完成后自检）===
-生成地图完成后，必须确认以下每一项：
-- [ ] 所有出生点都已设置（数量正确）
-- [ ] 每个出生点旁都有矿石（1-2 片）
-- [ ] 地面至少使用了 2 种以上地面类型
-- [ ] 至少有 1 个高地
-- [ ] 每个出生点到中央都有道路
-- [ ] 树木和装饰物远离出生点
-如果有遗漏，立即补充！
+**地形**
+- 调用 get_map_info 了解可用素材
+- 地面必须混合多种类型（如 grass + dark_grass + rough_grass + sand），不能是单一颜色
+- 用 create_plateau 制造高低差增加战术深度
+- fill_terrain 只支持 LAT 地面类型: grass, dark_grass, rough_grass, sand, pavement, snow, ice
 
-=== 1v1 对战地图完整模板 ===
-出生点分布（对角对称）：
-- 玩家1: x_pct=20, y_pct=20 (左上)
-- 玩家2: x_pct=80, y_pct=80 (右下)
-矿石位置：
-- 玩家1矿石A: x_pct=25, y_pct=20  矿石B: x_pct=20, y_pct=25
-- 玩家2矿石A: x_pct=75, y_pct=80  矿石B: x_pct=80, y_pct=75
-道路：
-- 玩家1(20,20) → 中央(50,50)
-- 玩家2(80,80) → 中央(50,50)
-地形变化示例：
-- fill_terrain(dark_grass, medium_patch, 30%, 70%)
-- fill_terrain(rough_grass, medium_patch, 70%, 30%)
-- fill_terrain(sand, small_patch, 50%, 50%) — 中央高地附近
-树木位置（远离出生点的 6 个位置）：
-- (10%, 50%) (50%, 10%) (90%, 50%) (50%, 90%) (35%, 65%) (65%, 35%)
+**玩家**
+- 出生点分布要对称公平，对角分布效果最佳
+- 每个出生点旁边放 1-2 片矿石（偏移 5-8%，不在同一位置）
+- 出生点周围保持空旷（不放树木和装饰物），让玩家能展开基地
 
-=== 2v2 对战地图布局参考 ===
-出生点分布（对角对称）：
-- 玩家1: x_pct=15, y_pct=15 (左上)
-- 玩家2: x_pct=85, y_pct=85 (右下)
-- 玩家3: x_pct=85, y_pct=15 (右上)
-- 玩家4: x_pct=15, y_pct=85 (左下)
+**交通与装饰**
+- 用道路连接出生点和中央区域
+- 树木分散在地图各处（远离出生点）
+- 装饰物用 sparse 密度
+- 自由安排位置和数量，让地图看起来自然而不是机械排列
 
-=== 基地空间规则（极其重要）===
-- 每个出生点周围必须留出足够空旷的空间供玩家展开基地（至少12格半径内不放装饰物和树木）
-- 树木和装饰物只放在地图的公共区域（中间、边缘），绝对不要堆在出生点附近
-- 装饰物默认用 sparse 密度，除非用户明确要求密集
+**创意**
+- 给地图起一个有创意的英文名
+- 不要拘泥于模板，根据地图尺寸和用户要求灵活设计
+- 可以在任何合理位置创建多个不同大小的高地
+- 地形变化要自然过渡（比如高地旁边铺 sand 模拟泥沙）
 
-=== 矿石放置规则（极其重要）===
-- 每个出生点旁边必须放 1-2 片矿石，矿石要紧挨出生点！
-- 矿石偏移量只需要 5-8%，不要太远！
-- 绝对禁止在出生点的相同位置放矿石！
-- 矿石半径用 5-7，不要太大
+=== 出生点参考位置 ===
+2人: 对角分布，如 (20%,20%) 和 (80%,80%)
+4人: 四角分布，如 (15%,15%)(85%,85%)(85%,15%)(15%,85%)
 
-=== 场景设计指南（{theaterName}）===
+=== 场景指南（{theaterName}）===
 {theaterGuide}
 
 === 位置说明 ===
-- position 参数使用方位词: center, north, south, east, west, northwest, northeast, southwest, southeast
-- 推荐使用 x_pct/y_pct 百分比精确指定位置(0=最左/最上, 100=最右/最下)
-- 代码会自动将位置转换为等距坐标，你不需要计算坐标
+- 推荐使用 x_pct/y_pct 百分比指定位置(0=最左/最上, 100=最右/最下)
+- 也可使用方位词: center, north, south, east, west, northwest, northeast, southwest, southeast
 
-=== 重要：fill_terrain 的 terrain 参数 ===
-- 仅支持 LAT 地面类型: grass, dark_grass, rough_grass, sand, pavement, snow, ice
-- 也可以使用 get_map_info 返回的可用地面类型中的全名
-
-完成地图操作后用简短中文告诉用户你做了什么。非地图操作的请求请直接拒绝。";
+完成后用简短中文告诉用户你做了什么。非地图操作请直接拒绝。";
         }
 
         private string GetTheaterGuide(string theaterName)
@@ -480,6 +445,63 @@ namespace TSMapEditor.AI
             RunningAgentLoop,
             WaitingForToolExecution,
             ToolResultsReady,
+        }
+
+        /// <summary>
+        /// Runs programmatic quality checks after the AI agent loop completes.
+        /// Auto-fixes missing spawn points, ore, and terrain diversity.
+        /// </summary>
+        private void RunQualityChecks()
+        {
+            if (map == null || toolExecutor == null)
+                return;
+
+            try
+            {
+                int expectedPlayers = MapQualityChecker.DetectExpectedPlayers(lastUserMessage);
+                if (expectedPlayers == 0)
+                    return; // Not a map generation request, skip checks
+
+                var checker = new MapQualityChecker(map, theaterGraphics);
+                var fixes = checker.Check(expectedPlayers);
+
+                if (fixes.Count == 0)
+                {
+                    Logger.Log("MapQualityChecker: All checks passed.");
+                    return;
+                }
+
+                ToolProgressUpdate?.Invoke(this, $"🔍 质量检查发现 {fixes.Count} 个问题，自动修复中...");
+
+                foreach (var fix in fixes)
+                {
+                    ToolProgressUpdate?.Invoke(this, $"  [自动补充] {fix.Description}");
+                    string result = toolExecutor.Execute(fix.ToolName, fix.ArgumentsJson);
+                    Logger.Log($"QualityFix: {fix.ToolName} → {result}");
+                }
+
+                ToolProgressUpdate?.Invoke(this, $"✅ 质量检查完成，已修复 {fixes.Count} 个问题");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"MapQualityChecker error: {ex.Message}");
+                // Quality checks are best-effort, don't fail the whole operation
+            }
+        }
+
+        /// <summary>
+        /// Trims chat history to prevent token overflow.
+        /// Keeps the most recent MaxHistoryMessages messages.
+        /// </summary>
+        private void TrimHistory()
+        {
+            if (chatHistory.Count <= MaxHistoryMessages)
+                return;
+
+            // Keep only the most recent messages
+            int removeCount = chatHistory.Count - MaxHistoryMessages;
+            chatHistory.RemoveRange(0, removeCount);
+            Logger.Log($"TrimHistory: removed {removeCount} old messages, {chatHistory.Count} remaining");
         }
     }
 }
