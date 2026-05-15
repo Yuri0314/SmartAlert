@@ -108,22 +108,49 @@ namespace TSMapEditor.Mutations.Classes
                         cell.Smudge = null;
                     }
 
-                    // Skip ramp/cliff tiles — overwriting these produces black artifacts
-                    bool isRamp = false;
+                    // Skip cells in height transition zones — overwriting these produces black artifacts.
+                    // A cell is in a transition zone if:
+                    //   1. Its TMP image has a non-None RampType (it's a ramp tile)
+                    //   2. It belongs to the engine's RampTileSet
+                    //   3. Its height differs from any cardinal neighbor (it's on a cliff/slope boundary)
+                    bool isHeightTransition = false;
+
+                    // Check 1: RampType in tile image
                     if (cell.TileImage != null && cell.TileImage.TMPImages != null &&
                         cell.SubTileIndex < cell.TileImage.TMPImages.Length)
                     {
                         var tmpImage = cell.TileImage.TMPImages[cell.SubTileIndex]?.TmpImage;
                         if (tmpImage != null && tmpImage.RampType != TSMapEditor.CCEngine.RampType.None)
-                            isRamp = true;
+                            isHeightTransition = true;
                     }
 
-                    // Also check via TileIndex range for ramp tileset
-                    var rampTileSet = MutationTarget.TheaterGraphics.Theater.RampTileSet;
-                    if (rampTileSet != null && rampTileSet.ContainsTile(cell.TileIndex))
-                        isRamp = true;
+                    // Check 2: RampTileSet membership
+                    if (!isHeightTransition)
+                    {
+                        var rampTileSet = MutationTarget.TheaterGraphics.Theater.RampTileSet;
+                        if (rampTileSet != null && rampTileSet.ContainsTile(cell.TileIndex))
+                            isHeightTransition = true;
+                    }
 
-                    if (!isRamp)
+                    // Check 3: Height differs from any cardinal neighbor (cliff/slope boundary)
+                    if (!isHeightTransition)
+                    {
+                        int[][] neighbors = new[] {
+                            new[] { x - 1, y }, new[] { x + 1, y },
+                            new[] { x, y - 1 }, new[] { x, y + 1 }
+                        };
+                        foreach (var n in neighbors)
+                        {
+                            var neighbor = Map.GetTile(n[0], n[1]);
+                            if (neighbor != null && neighbor.Level != cell.Level)
+                            {
+                                isHeightTransition = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!isHeightTransition)
                     {
                         // Change terrain tile
                         cell.ChangeTileIndex(tileIndex, 0);
