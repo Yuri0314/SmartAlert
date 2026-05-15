@@ -132,12 +132,14 @@ namespace TSMapEditor.Mutations.Classes
                             isHeightTransition = true;
                     }
 
-                    // Check 3: Height differs from any cardinal neighbor (cliff/slope boundary)
+                    // Check 3: Height differs from any neighbor including diagonals (cliff/slope boundary)
                     if (!isHeightTransition)
                     {
                         int[][] neighbors = new[] {
                             new[] { x - 1, y }, new[] { x + 1, y },
-                            new[] { x, y - 1 }, new[] { x, y + 1 }
+                            new[] { x, y - 1 }, new[] { x, y + 1 },
+                            new[] { x - 1, y - 1 }, new[] { x + 1, y - 1 },
+                            new[] { x - 1, y + 1 }, new[] { x + 1, y + 1 }
                         };
                         foreach (var n in neighbors)
                         {
