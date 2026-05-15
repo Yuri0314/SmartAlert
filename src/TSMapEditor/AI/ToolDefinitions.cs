@@ -30,6 +30,7 @@ namespace TSMapEditor.AI
             ClearArea,
             SetMapName,
             SearchUnits,
+            PlaceTile,
         };
 
         // ─── Query Tools ────────────────────────────────────────────
@@ -226,6 +227,20 @@ namespace TSMapEditor.AI
             {
                 ["keyword"] = PropString("搜索关键词，如 'truck' '卡车' 'European' '路灯' 'farm' '医院' 等"),
             }, required: new[] { "keyword" })
+        };
+
+        public static ToolDefinition PlaceTile => new ToolDefinition
+        {
+            Name = "place_tile",
+            Description = "在指定位置放置一个地块集中的地块。用于放置悬崖、海岸线、泥路等装饰性地形。先调用 get_map_info 查看可用地块集列表。",
+            Parameters = Schema(new Dictionary<string, object>
+            {
+                ["tileset_name"] = PropString("地块集名称（从 get_map_info 返回的可用地块集中选择）"),
+                ["position"] = PropEnum("放置位置", PositionEnum),
+                ["x_pct"] = PropInt("X百分比(0=最左,100=最右)", 0, 100),
+                ["y_pct"] = PropInt("Y百分比(0=最上,100=最下)", 0, 100),
+                ["variant_index"] = PropInt("地块变体编号(0开始)，不指定则随机选择", 0, 100),
+            }, required: new[] { "tileset_name" })
         };
 
         // ─── Schema Helpers ─────────────────────────────────────────

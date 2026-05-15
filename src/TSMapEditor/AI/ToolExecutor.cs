@@ -68,6 +68,7 @@ namespace TSMapEditor.AI
                     "clear_area" => ExecuteClearArea(args),
                     "set_map_name" => ExecuteSetMapName(args),
                     "search_units" => ExecuteSearchUnits(args),
+                    "place_tile" => ExecutePlaceTile(args),
                     _ => $"❌ 未知工具: {toolName}"
                 };
             }
@@ -117,6 +118,20 @@ namespace TSMapEditor.AI
             var terrainTypes = map.Rules.TerrainTypes.Take(20)
                 .Select(t => t.ININame).ToList();
 
+            // Collect placeable tile sets (cliffs, shores, roads, etc.)
+            var tileSets = theaterGraphics.Theater.TileSets;
+            var placeableSets = new List<string>();
+            foreach (var ts in tileSets)
+            {
+                if (ts.AllowToPlace && ts.LoadedTileCount > 0 && !string.IsNullOrWhiteSpace(ts.SetName))
+                {
+                    // Skip LAT grounds (already listed above) and clear/base tiles
+                    bool isLat = latNames.Any(n => string.Equals(n, ts.SetName, StringComparison.OrdinalIgnoreCase));
+                    if (!isLat && ts.SetName != "Clear")
+                        placeableSets.Add($"{ts.SetName}({ts.LoadedTileCount})");
+                }
+            }
+
             return $"地图尺寸: {map.Size.X}x{map.Size.Y}\n" +
                    $"场景(Theater): {theaterName}\n" +
                    $"等距中心: ({positionResolver.Center},{positionResolver.Center})\n" +
@@ -124,6 +139,7 @@ namespace TSMapEditor.AI
                    $"当前出生点数量: {spawnCount}\n" +
                    $"可用所属方: {string.Join(", ", houses.Select(h => h.ININame))}\n" +
                    $"可用地面类型: {string.Join(", ", latNames)}\n" +
+                   $"可用地块集(地形装饰): {string.Join(", ", placeableSets.Take(25))}\n" +
                    $"可用地物类型(示例): {string.Join(", ", terrainTypes)}\n" +
                    $"地图名称: {map.Basic.Name ?? "(未设置)"}";
         }
@@ -771,6 +787,73 @@ namespace TSMapEditor.AI
             int? yPct = args.TryGetInt($"{prefix}_y_pct");
             if (xPct.HasValue && yPct.HasValue) return $"({xPct}%,{yPct}%)";
             return "center";
+        }
+        // ─── Tile Set Placement ──────────────────────────────────────
+
+        private string ExecutePlaceTile(JsonElement args)
+        {
+            string tileSetName = args.GetProperty("tileset_name").GetString();
+            int? variantIndex = args.TryGetInt("variant_index");
+
+            // Find the tileset
+            var tileSets = theaterGraphics.Theater.TileSets;
+            CCEngine.TileSet matchedSet = null;
+            foreach (var ts in tileSets)
+            {
+                if (ts.SetName != null && string.Equals(ts.SetName, tileSetName, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedSet = ts;
+                    break;
+                }
+            }
+            // Fuzzy match if exact not found
+            if (matchedSet == null)
+            {
+                foreach (var ts in tileSets)
+                {
+                    if (ts.SetName?.IndexOf(tileSetName, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        matchedSet = ts;
+                        break;
+                    }
+                }
+            }
+
+            if (matchedSet == null)
+                return $"X 找不到地块集: {tileSetName}。请使用 get_map_info 查看可用地块集。";
+
+            if (matchedSet.LoadedTileCount == 0)
+                return $"X 地块集 {matchedSet.SetName} 没有可用地块。";
+
+            // Determine which variant (tile within the set) to use
+            int actualVariant;
+            if (variantIndex.HasValue && variantIndex.Value >= 0 && variantIndex.Value < matchedSet.LoadedTileCount)
+            {
+                actualVariant = variantIndex.Value;
+            }
+            else
+            {
+                // Random variant
+                actualVariant = new Random().Next(matchedSet.LoadedTileCount);
+            }
+
+            int tileIndex = matchedSet.StartTileIndex + actualVariant;
+
+            // Get position
+            var pos = ResolvePosition(args);
+
+            // Place the tile using a small 1x1 mutation
+            var cell = map.GetTile(pos.X, pos.Y);
+            if (cell == null)
+                return $"X 位置 ({pos.X},{pos.Y}) 超出地图范围。";
+
+            // Use a 1x1 terrain mutation for proper undo support
+            var mutation = new Mutations.Classes.AITerrainMutation(
+                mutationTarget, pos.X, pos.Y, 1, 1, tileIndex,
+                $"放置地块 {matchedSet.SetName} 变体{actualVariant}");
+            mutationManager.PerformMutation(mutation);
+
+            return $"> 已在 ({pos.X},{pos.Y}) 放置地块 {matchedSet.SetName} (变体{actualVariant}/{matchedSet.LoadedTileCount})";
         }
 
         // ─── Internal Helpers ────────────────────────────────────────
