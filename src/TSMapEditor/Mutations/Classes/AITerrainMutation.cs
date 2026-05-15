@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using TSMapEditor.CCEngine;
 using TSMapEditor.GameMath;
 using TSMapEditor.Models;
+using TSMapEditor.Mutations.Classes.HeightMutations;
 using TSMapEditor.Rendering;
 using TSMapEditor.UI;
+using HCT = TSMapEditor.Mutations.Classes.HeightMutations.HeightComparisonType;
 
 namespace TSMapEditor.Mutations.Classes
 {
@@ -108,55 +111,8 @@ namespace TSMapEditor.Mutations.Classes
                         cell.Smudge = null;
                     }
 
-                    // Skip cells in height transition zones — overwriting these produces black artifacts.
-                    // A cell is in a transition zone if:
-                    //   1. Its TMP image has a non-None RampType (it's a ramp tile)
-                    //   2. It belongs to the engine's RampTileSet
-                    //   3. Its height differs from any cardinal neighbor (it's on a cliff/slope boundary)
-                    bool isHeightTransition = false;
-
-                    // Check 1: RampType in tile image
-                    if (cell.TileImage != null && cell.TileImage.TMPImages != null &&
-                        cell.SubTileIndex < cell.TileImage.TMPImages.Length)
-                    {
-                        var tmpImage = cell.TileImage.TMPImages[cell.SubTileIndex]?.TmpImage;
-                        if (tmpImage != null && tmpImage.RampType != TSMapEditor.CCEngine.RampType.None)
-                            isHeightTransition = true;
-                    }
-
-                    // Check 2: RampTileSet membership
-                    if (!isHeightTransition)
-                    {
-                        var rampTileSet = MutationTarget.TheaterGraphics.Theater.RampTileSet;
-                        if (rampTileSet != null && rampTileSet.ContainsTile(cell.TileIndex))
-                            isHeightTransition = true;
-                    }
-
-                    // Check 3: Height differs from any neighbor including diagonals (cliff/slope boundary)
-                    if (!isHeightTransition)
-                    {
-                        int[][] neighbors = new[] {
-                            new[] { x - 1, y }, new[] { x + 1, y },
-                            new[] { x, y - 1 }, new[] { x, y + 1 },
-                            new[] { x - 1, y - 1 }, new[] { x + 1, y - 1 },
-                            new[] { x - 1, y + 1 }, new[] { x + 1, y + 1 }
-                        };
-                        foreach (var n in neighbors)
-                        {
-                            var neighbor = Map.GetTile(n[0], n[1]);
-                            if (neighbor != null && neighbor.Level != cell.Level)
-                            {
-                                isHeightTransition = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!isHeightTransition)
-                    {
-                        // Change terrain tile
-                        cell.ChangeTileIndex(tileIndex, 0);
-                    }
+                    // Change terrain tile (paint freely, ramp repair happens after)
+                    cell.ChangeTileIndex(tileIndex, 0);
 
                     // Flatten height if requested (e.g., water should be at level 0)
                     if (flattenHeight)
@@ -172,6 +128,12 @@ namespace TSMapEditor.Mutations.Classes
             {
                 ApplyGenericAutoLAT(startX, startY, startX + width, startY + height);
             }
+
+            // Systematic height transition repair:
+            // After painting, re-apply correct ramp tiles for any cell that has
+            // height differences with its neighbors. This uses the same engine logic
+            // as create_plateau's Process() → ApplyRamps(), so it's always correct.
+            RepairHeightTransitions(startX - 1, startY - 1, startX + width + 1, startY + height + 1);
 
             MutationTarget.InvalidateMap();
         }
@@ -223,6 +185,117 @@ namespace TSMapEditor.Mutations.Classes
             }
 
             MutationTarget.InvalidateMap();
+        }
+
+        /// <summary>
+        /// Systematically repairs height transition tiles in the given area.
+        /// After fill_terrain paints over ramp/cliff tiles, this method re-applies
+        /// the correct ramp tiles by using the engine's native TransitionRampInfo matching —
+        /// the same logic used by create_plateau and the manual height tools.
+        /// 
+        /// This is the systematic solution to the "black line" problem: instead of trying
+        /// to predict which cells to skip (fragile), we paint freely and then fix up.
+        /// </summary>
+        private void RepairHeightTransitions(int minX, int minY, int maxX, int maxY)
+        {
+            var rampTileSet = MutationTarget.TheaterGraphics.Theater.RampTileSet;
+            if (rampTileSet == null)
+                return;
+
+            // Use the same transition ramp info table as the engine's FSRaiseGroundMutation
+            var transitionInfos = GetRaiseGroundTransitionRampInfos();
+
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    var cell = Map.GetTile(x, y);
+                    if (cell == null)
+                        continue;
+
+                    // Only process cells that have height differences with neighbors
+                    bool hasHeightDiff = false;
+                    for (int dir = 0; dir < (int)Direction.Count; dir++)
+                    {
+                        var neighbor = Map.GetTile(new Point2D(x, y) + Helpers.VisualDirectionToPoint((Direction)dir));
+                        if (neighbor != null && neighbor.Level != cell.Level)
+                        {
+                            hasHeightDiff = true;
+                            break;
+                        }
+                    }
+
+                    if (!hasHeightDiff)
+                        continue;
+
+                    // Try to match against the engine's ramp transition table
+                    var cellCoords = new Point2D(x, y);
+                    foreach (var tri in transitionInfos)
+                    {
+                        if (tri.Matches(Map, cellCoords, cell.Level))
+                        {
+                            if (tri.RampType == CCEngine.RampType.None)
+                            {
+                                cell.ChangeTileIndex(0, 0);
+                            }
+                            else
+                            {
+                                cell.ChangeTileIndex(rampTileSet.StartTileIndex + ((int)tri.RampType - 1), 0);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns the same TransitionRampInfo table used by FSRaiseGroundMutation.
+        /// This is the engine's complete knowledge of which ramp tile to use for
+        /// each possible height configuration around a cell.
+        /// </summary>
+        private static TransitionRampInfo[] GetRaiseGroundTransitionRampInfos()
+        {
+            return new[]
+            {
+                new TransitionRampInfo(RampType.West, new() { HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.North, new() { HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.East, new() { HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual }),
+                new TransitionRampInfo(RampType.South, new() { HCT.Higher, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual }),
+
+                new TransitionRampInfo(RampType.CornerNW, new() { HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.Equal, HCT.Higher, HCT.Equal, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.CornerNE, new() { HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.Equal, HCT.Higher, HCT.Equal, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.CornerSE, new() { HCT.Equal, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.Equal, HCT.Higher }),
+                new TransitionRampInfo(RampType.CornerSW, new() { HCT.Equal, HCT.Higher, HCT.Equal, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual }),
+
+                new TransitionRampInfo(RampType.MidNW, new() { HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Equal, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.MidNE, new() { HCT.Equal, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.HigherOrEqual }),
+                new TransitionRampInfo(RampType.MidSE, new() { HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Equal, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Higher }),
+                new TransitionRampInfo(RampType.MidSW, new() { HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Equal, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual }),
+
+                new TransitionRampInfo(RampType.DoubleUpSWNE, new() { HCT.Equal, HCT.Higher, HCT.Equal, HCT.Irrelevant, HCT.Equal, HCT.Higher, HCT.Equal, HCT.Irrelevant }),
+                new TransitionRampInfo(RampType.DoubleDownSWNE, new() { HCT.Equal, HCT.Irrelevant, HCT.Equal, HCT.Higher, HCT.Equal, HCT.Irrelevant, HCT.Equal, HCT.Higher }),
+
+                // Extended mid-ramp patterns
+                new TransitionRampInfo(RampType.MidNE, new() { HCT.Equal, HCT.LowerOrEqual, HCT.Equal, HCT.Higher, HCT.Equal, HCT.Irrelevant, HCT.Higher, HCT.Irrelevant }),
+                new TransitionRampInfo(RampType.MidSW, new() { HCT.Equal, HCT.Equal, HCT.Higher, HCT.Irrelevant, HCT.Equal, HCT.Equal, HCT.Equal, HCT.Higher }),
+                new TransitionRampInfo(RampType.MidNW, new() { HCT.Equal, HCT.Higher, HCT.Equal, HCT.Equal, HCT.Higher, HCT.Equal, HCT.Equal, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.MidSE, new() { HCT.Higher, HCT.Equal, HCT.Equal, HCT.LowerOrEqual, HCT.Equal, HCT.Higher, HCT.Equal, HCT.Equal }),
+                new TransitionRampInfo(RampType.MidSE, new() { HCT.Equal, HCT.Higher, HCT.Equal, HCT.LowerOrEqual, HCT.Equal, HCT.Irrelevant, HCT.Higher, HCT.Equal }),
+                new TransitionRampInfo(RampType.MidNW, new() { HCT.Equal, HCT.Irrelevant, HCT.Higher, HCT.Equal, HCT.Equal, HCT.Higher, HCT.Equal, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.MidNE, new() { HCT.Equal, HCT.LowerOrEqual, HCT.Equal, HCT.Equal, HCT.Higher, HCT.Equal, HCT.Equal, HCT.Higher }),
+                new TransitionRampInfo(RampType.MidSW, new() { HCT.Higher, HCT.Equal, HCT.Equal, HCT.Higher, HCT.Equal, HCT.Equal, HCT.LowerOrEqual, HCT.Equal }),
+
+                // Less likely mid-ramp cases
+                new TransitionRampInfo(RampType.MidNW, new() { HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.MidNW, new() { HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual }),
+                new TransitionRampInfo(RampType.MidNE, new() { HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual }),
+                new TransitionRampInfo(RampType.MidNE, new() { HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual }),
+                new TransitionRampInfo(RampType.MidSE, new() { HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual }),
+                new TransitionRampInfo(RampType.MidSE, new() { HCT.Higher, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual }),
+                new TransitionRampInfo(RampType.MidSW, new() { HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.Higher, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual }),
+                new TransitionRampInfo(RampType.MidSW, new() { HCT.Higher, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.HigherOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.LowerOrEqual, HCT.HigherOrEqual }),
+            };
         }
 
         // --- Undo data structs ---
