@@ -127,8 +127,17 @@ namespace TSMapEditor.AI
                 {
                     // Skip LAT grounds (already listed above) and clear/base tiles
                     bool isLat = latNames.Any(n => string.Equals(n, ts.SetName, StringComparison.OrdinalIgnoreCase));
-                    if (!isLat && ts.SetName != "Clear")
-                        placeableSets.Add($"{ts.SetName}({ts.LoadedTileCount})");
+                    if (isLat || ts.SetName == "Clear")
+                        continue;
+
+                    // Skip tile sets that need game logic (height changes, adjacent water, etc.)
+                    // These should use create_plateau or draw_river instead of place_tile
+                    string nameLower = ts.SetName.ToLowerInvariant();
+                    if (nameLower.Contains("cliff") || nameLower.Contains("ramp") ||
+                        nameLower.Contains("shore") || nameLower.Contains("bridge"))
+                        continue;
+
+                    placeableSets.Add($"{ts.SetName}({ts.LoadedTileCount})");
                 }
             }
 
