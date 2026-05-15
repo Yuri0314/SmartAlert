@@ -232,7 +232,7 @@ namespace TSMapEditor.AI
         public static ToolDefinition PlaceTile => new ToolDefinition
         {
             Name = "place_tile",
-            Description = "在指定位置放置一个地块集中的地块。用于放置悬崖、海岸线、泥路等装饰性地形。先调用 get_map_info 查看可用地块集列表。",
+            Description = "在指定位置放置一个地块集中的地块。用于放置海岸线、泥路、水晶等装饰性地形。注意：悬崖/坡度需要高度差，请用 create_plateau。先调用 get_map_info 查看可用地块集列表。",
             Parameters = Schema(new Dictionary<string, object>
             {
                 ["tileset_name"] = PropString("地块集名称（从 get_map_info 返回的可用地块集中选择）"),

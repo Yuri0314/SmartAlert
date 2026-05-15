@@ -362,7 +362,7 @@ namespace TSMapEditor.AI
 7. 调用 draw_road 修建道路
 8. 调用 place_trees / fill_terrain 装饰（远离出生点）
 9. 调用 place_decorations 少量散布装饰物（仅在远离出生点的区域，密度用sparse）
-10. 可选：调用 place_tile 放置地块集装饰（悬崖、海岸线、泥路等，使用 get_map_info 返回的可用地块集名称）
+10. 可选：调用 place_tile 放置装饰地块（海岸线、泥路、水晶等，使用 get_map_info 返回的可用地块集名称。注意：悬崖/坡度请用 create_plateau）
 
 === 2v2 对战地图布局参考 ===
 出生点分布（对角对称）：
