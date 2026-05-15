@@ -618,6 +618,7 @@ namespace TSMapEditor.UI
                     bool busy = pendingBusyState.Value;
                     lblStatus.Text = busy ? Translator.Translate("AIChatPanel.Thinking", "AI thinking...") : (chatService.IsConfigured ? Translator.Translate("AIChatPanel.Ready", "Ready") : Translator.Translate("AIChatPanel.NotConfigured", "Not configured"));
                     btnSend.AllowClick = !busy;
+                    tbInput.InputEnabled = !busy;
                     pendingBusyState = null;
                 }
             }
