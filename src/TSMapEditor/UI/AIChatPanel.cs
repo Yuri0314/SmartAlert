@@ -110,7 +110,7 @@ namespace TSMapEditor.UI
             lbMessages.X = Padding;
             lbMessages.Y = HeaderHeight + Padding;
             lbMessages.Width = Width - Padding * 2;
-            lbMessages.Height = Height - HeaderHeight - InputAreaHeight - Padding * 2;
+            lbMessages.Height = Height - HeaderHeight - InputAreaHeight - Padding * 2 - ResizeHandleSize;
             lbMessages.FontIndex = Constants.UIDefaultFont;
             lbMessages.LineHeight = 18;
             lbMessages.AllowRightClickUnselect = false;
@@ -144,7 +144,7 @@ namespace TSMapEditor.UI
             tbInput = new EditorTextBox(WindowManager);
             tbInput.Name = nameof(tbInput);
             tbInput.X = Padding;
-            tbInput.Y = Height - Constants.UITextBoxHeight - Padding;
+            tbInput.Y = Height - Constants.UITextBoxHeight - Padding - ResizeHandleSize;
             tbInput.Width = Width - 60 - Padding * 3;
             tbInput.EnterPressed += (s, e) => SendMessage();
             AddChild(tbInput);
@@ -210,12 +210,12 @@ namespace TSMapEditor.UI
             btnClear.X = btnSettings.X - btnClear.Width - Padding;
 
             lbMessages.Width = Width - Padding * 2;
-            lbMessages.Height = Height - HeaderHeight - InputAreaHeight - Padding * 2;
+            lbMessages.Height = Height - HeaderHeight - InputAreaHeight - Padding * 2 - ResizeHandleSize;
 
             lblStatus.Y = lbMessages.Bottom + 2;
             lblStatus.ClientRectangle = new Rectangle(Padding, lbMessages.Bottom + 2, Width - Padding * 2, 16);
 
-            tbInput.Y = Height - Constants.UITextBoxHeight - Padding;
+            tbInput.Y = Height - Constants.UITextBoxHeight - Padding - ResizeHandleSize;
             tbInput.Width = Width - 60 - Padding * 3;
 
             btnSend.X = tbInput.Right + Padding;
