@@ -251,8 +251,17 @@ namespace TSMapEditor.UI
             try
             {
                 var sb = new StringBuilder();
+                string lastRole = null;
                 foreach (var item in lbMessages.Items)
                 {
+                    string role = item.Tag as string;
+                    // Add role header when switching roles
+                    if (role != null && role != lastRole)
+                    {
+                        if (sb.Length > 0) sb.AppendLine();
+                        sb.AppendLine($"--- [{role}] ---");
+                        lastRole = role;
+                    }
                     sb.AppendLine(item.Text);
                 }
                 string text = sb.ToString().Trim();
@@ -378,6 +387,7 @@ namespace TSMapEditor.UI
                 var item = new XNAListBoxItem();
                 item.Text = first ? line : "    " + line;
                 item.TextColor = new Color(100, 180, 255);
+                item.Tag = "You";
                 lbMessages.AddItem(item);
                 first = false;
             }
@@ -402,6 +412,7 @@ namespace TSMapEditor.UI
                     var item = new XNAListBoxItem();
                     item.Text = firstWrapped ? wl : "    " + wl;
                     item.TextColor = new Color(180, 255, 180);
+                    item.Tag = "AI";
                     lbMessages.AddItem(item);
                     firstWrapped = false;
                 }
@@ -418,6 +429,7 @@ namespace TSMapEditor.UI
                 var item = new XNAListBoxItem();
                 item.Text = line;
                 item.TextColor = new Color(180, 180, 180);
+                item.Tag = "System";
                 lbMessages.AddItem(item);
             }
             ScrollToBottom();
@@ -425,12 +437,37 @@ namespace TSMapEditor.UI
 
         private void AddErrorMessage(string text)
         {
-            var wrappedLines = WrapText("✗ " + text, lbMessages.Width);
+            var wrappedLines = WrapText("[X] " + text, lbMessages.Width);
             foreach (string line in wrappedLines)
             {
                 var item = new XNAListBoxItem();
                 item.Text = line;
                 item.TextColor = new Color(255, 120, 120);
+                item.Tag = "Error";
+                lbMessages.AddItem(item);
+            }
+            ScrollToBottom();
+        }
+
+        /// <summary>
+        /// Adds a tool execution progress message with distinct yellow color.
+        /// Replaces Unicode markers (like checkmarks) with ASCII-safe alternatives.
+        /// </summary>
+        private void AddToolMessage(string text)
+        {
+            // Replace Unicode symbols that bitmap fonts can't render
+            text = text.Replace("\u2713", ">")   // ✓ → >
+                       .Replace("\u2714", ">")   // ✔ → >
+                       .Replace("\u2717", "X")   // ✗ → X
+                       .Replace("\u2718", "X");  // ✘ → X
+
+            var wrappedLines = WrapText("  > " + text, lbMessages.Width);
+            foreach (string line in wrappedLines)
+            {
+                var item = new XNAListBoxItem();
+                item.Text = line;
+                item.TextColor = new Color(220, 200, 100); // Yellow for tool actions
+                item.Tag = "Tool";
                 lbMessages.AddItem(item);
             }
             ScrollToBottom();
@@ -446,7 +483,7 @@ namespace TSMapEditor.UI
         public void ShowSelectionInfo(int x, int y, int width, int height)
         {
             var item = new XNAListBoxItem();
-            item.Text = $"◆ {Translator.Translate("AIChatPanel.SelectedArea", "Selected area")}: ({x},{y}) {width}×{height}";
+            item.Text = $"* {Translator.Translate("AIChatPanel.SelectedArea", "Selected area")}: ({x},{y}) {width}x{height}";
             item.TextColor = new Color(0, 220, 220); // Cyan
             lbMessages.AddItem(item);
 
@@ -464,7 +501,7 @@ namespace TSMapEditor.UI
         public void ClearSelectionInfo()
         {
             var item = new XNAListBoxItem();
-            item.Text = "◇ " + Translator.Translate("AIChatPanel.SelectionCleared", "Selection cleared");
+            item.Text = "* " + Translator.Translate("AIChatPanel.SelectionCleared", "Selection cleared");
             item.TextColor = new Color(120, 120, 120);
             lbMessages.AddItem(item);
             ScrollToBottom();
@@ -523,6 +560,10 @@ namespace TSMapEditor.UI
         {
             base.Update(gameTime);
 
+            // When resizing, suppress the parent class's window drag
+            if (isResizing)
+                IsDragged = false;
+
             // Handle resize dragging
             if (isResizing)
             {
@@ -556,7 +597,7 @@ namespace TSMapEditor.UI
 
                 if (pendingProgress != null)
                 {
-                    AddSystemMessage(pendingProgress);
+                    AddToolMessage(pendingProgress);
                     pendingProgress = null;
                 }
 
