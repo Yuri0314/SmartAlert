@@ -339,8 +339,34 @@ namespace TSMapEditor.Mutations.Classes
             // and produce black dotted line artifacts.
             if (MutationTarget.AutoLATEnabled && placedMinX <= placedMaxX)
             {
+                // Save height transition tiles before AutoLAT (same pattern as AITerrainMutation)
+                var heightTransitionTiles = new Dictionary<Point2D, (int TileIndex, byte SubTileIndex)>();
+                for (int y = placedMinY - 2; y <= placedMaxY + 2; y++)
+                {
+                    for (int x = placedMinX - 2; x <= placedMaxX + 2; x++)
+                    {
+                        var cell = Map.GetTile(x, y);
+                        if (cell == null) continue;
+
+                        if (IsAtHeightBoundary(cell, x, y))
+                        {
+                            heightTransitionTiles[new Point2D(x, y)] = (cell.TileIndex, cell.SubTileIndex);
+                        }
+                    }
+                }
+
                 int tileSetId = theaterGraphics.GetTileSetId(tileIndex);
                 ApplyAutoLATForTileSetPlacement(tileSetId, placedMinX - 1, placedMinY - 1, placedMaxX + 1, placedMaxY + 1);
+
+                // Restore height transition tiles that AutoLAT may have damaged
+                foreach (var kvp in heightTransitionTiles)
+                {
+                    var cell = Map.GetTile(kvp.Key);
+                    if (cell != null && IsAtHeightBoundary(cell, kvp.Key.X, kvp.Key.Y))
+                    {
+                        cell.ChangeTileIndex(kvp.Value.TileIndex, kvp.Value.SubTileIndex);
+                    }
+                }
             }
 
             MutationTarget.InvalidateMap();
@@ -430,6 +456,20 @@ namespace TSMapEditor.Mutations.Classes
                 if (e2 < dx) { err += dx; y0 += sy; }
             }
             return points;
+        }
+        /// <summary>
+        /// Checks if a cell is at a height transition boundary (any neighbor has a different height level).
+        /// </summary>
+        private bool IsAtHeightBoundary(MapTile cell, int x, int y)
+        {
+            for (int dir = 0; dir < (int)Direction.Count; dir++)
+            {
+                var offset = Helpers.VisualDirectionToPoint((Direction)dir);
+                var neighbor = Map.GetTile(x + offset.X, y + offset.Y);
+                if (neighbor != null && neighbor.Level != cell.Level)
+                    return true;
+            }
+            return false;
         }
     }
 }

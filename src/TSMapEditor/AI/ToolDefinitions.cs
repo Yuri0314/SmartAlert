@@ -22,7 +22,9 @@ namespace TSMapEditor.AI
             DrawRoad,
             DrawRiver,
             PlaceBuilding,
+            PlaceBuildings,
             PlaceUnit,
+            PlaceUnits,
             SetSpawnPoint,
             PlaceOre,
             PlaceTrees,
@@ -129,7 +131,7 @@ namespace TSMapEditor.AI
         public static ToolDefinition PlaceUnit => new ToolDefinition
         {
             Name = "place_unit",
-            Description = "放置一个载具单位。",
+            Description = "放置一个载具单位。批量放置请用 place_units。",
             Parameters = Schema(new Dictionary<string, object>
             {
                 ["position"] = PropEnum("放置位置", PositionEnum),
@@ -138,6 +140,58 @@ namespace TSMapEditor.AI
                 ["name"] = PropString("单位INI名称"),
                 ["owner"] = PropEnum("所属方", new[] { "Neutral", "Special", "GDI", "Nod" }),
             }, required: new[] { "name" })
+        };
+
+        public static ToolDefinition PlaceBuildings => new ToolDefinition
+        {
+            Name = "place_buildings",
+            Description = "批量放置多个建筑。一次调用放置多个建筑，比多次调用 place_building 更高效。",
+            Parameters = Schema(new Dictionary<string, object>
+            {
+                ["items"] = new Dictionary<string, object>
+                {
+                    ["type"] = "array",
+                    ["description"] = "要放置的建筑列表",
+                    ["items"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new Dictionary<string, object>
+                        {
+                            ["name"] = PropString("建筑INI名称"),
+                            ["x_pct"] = PropInt("X百分比", 0, 100),
+                            ["y_pct"] = PropInt("Y百分比", 0, 100),
+                            ["owner"] = PropString("所属方(默认Neutral)"),
+                        },
+                        ["required"] = new[] { "name", "x_pct", "y_pct" }
+                    }
+                }
+            }, required: new[] { "items" })
+        };
+
+        public static ToolDefinition PlaceUnits => new ToolDefinition
+        {
+            Name = "place_units",
+            Description = "批量放置多个载具单位。一次调用放置多个单位，比多次调用 place_unit 更高效。",
+            Parameters = Schema(new Dictionary<string, object>
+            {
+                ["items"] = new Dictionary<string, object>
+                {
+                    ["type"] = "array",
+                    ["description"] = "要放置的单位列表",
+                    ["items"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new Dictionary<string, object>
+                        {
+                            ["name"] = PropString("单位INI名称"),
+                            ["x_pct"] = PropInt("X百分比", 0, 100),
+                            ["y_pct"] = PropInt("Y百分比", 0, 100),
+                            ["owner"] = PropString("所属方(默认Neutral)"),
+                        },
+                        ["required"] = new[] { "name", "x_pct", "y_pct" }
+                    }
+                }
+            }, required: new[] { "items" })
         };
 
         public static ToolDefinition SetSpawnPoint => new ToolDefinition

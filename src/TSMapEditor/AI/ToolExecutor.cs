@@ -60,7 +60,9 @@ namespace TSMapEditor.AI
                     "draw_road" => ExecuteDrawRoad(args),
                     "draw_river" => ExecuteDrawRiver(args),
                     "place_building" => ExecutePlaceBuilding(args),
+                    "place_buildings" => ExecutePlaceBatch(args, AIPlaceObjectType.Building),
                     "place_unit" => ExecutePlaceUnit(args),
+                    "place_units" => ExecutePlaceBatch(args, AIPlaceObjectType.Vehicle),
                     "set_spawn_point" => ExecuteSetSpawnPoint(args),
                     "place_ore" => ExecutePlaceOre(args),
                     "place_trees" => ExecutePlaceTrees(args),
@@ -365,6 +367,82 @@ namespace TSMapEditor.AI
             mutationManager.PerformMutation(mutation);
 
             return $"✓ 已在 {GetPositionDescription(args)} 放置 {resolvedName}（{owner.ININame}）";
+        }
+
+        /// <summary>
+        /// Batch placement: handles place_buildings and place_units.
+        /// Accepts {"items": [{name, x_pct, y_pct, owner?}, ...]}
+        /// </summary>
+        private string ExecutePlaceBatch(JsonElement args, AIPlaceObjectType objectType)
+        {
+            if (!args.TryGetProperty("items", out var itemsArray) || itemsArray.ValueKind != JsonValueKind.Array)
+                return "❌ 缺少 items 数组";
+
+            int successCount = 0;
+            int failCount = 0;
+            var errors = new List<string>();
+
+            foreach (var item in itemsArray.EnumerateArray())
+            {
+                try
+                {
+                    string name = item.GetProperty("name").GetString();
+                    int xPct = item.TryGetProperty("x_pct", out var xp) ? xp.GetInt32() : 50;
+                    int yPct = item.TryGetProperty("y_pct", out var yp) ? yp.GetInt32() : 50;
+                    string ownerName = item.TryGetProperty("owner", out var ow) ? ow.GetString() ?? "Neutral" : "Neutral";
+
+                    var pos = positionResolver.Resolve(null, xPct, yPct);
+
+                    string resolvedName = ResolveObjectININame(name, objectType);
+                    if (resolvedName == null)
+                    {
+                        errors.Add($"{name}(未找到)");
+                        failCount++;
+                        continue;
+                    }
+
+                    House owner = ResolveOwner(ownerName);
+                    if (owner == null)
+                    {
+                        errors.Add($"{name}(所属方'{ownerName}'无效)");
+                        failCount++;
+                        continue;
+                    }
+
+                    // Find valid position
+                    if (map.GetTile(pos) == null)
+                    {
+                        for (int r = 1; r <= 5; r++)
+                        {
+                            bool found = false;
+                            for (int dy = -r; dy <= r && !found; dy++)
+                                for (int dx = -r; dx <= r && !found; dx++)
+                                {
+                                    var candidate = new Point2D(pos.X + dx, pos.Y + dy);
+                                    if (map.GetTile(candidate) != null) { pos = candidate; found = true; }
+                                }
+                            if (found) break;
+                        }
+                    }
+
+                    var positions = new List<Point2D> { pos };
+                    var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
+                        resolvedName, owner, positions, $"批量放置 {resolvedName}");
+                    mutationManager.PerformMutation(mutation);
+                    successCount++;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"异常: {ex.Message}");
+                    failCount++;
+                }
+            }
+
+            string typeName = objectType == AIPlaceObjectType.Building ? "建筑" : "载具";
+            string result = $"✓ 批量放置{typeName}: {successCount}个成功";
+            if (failCount > 0)
+                result += $", {failCount}个失败({string.Join(", ", errors)})";
+            return result;
         }
 
         private string ExecuteSetSpawnPoint(JsonElement args)

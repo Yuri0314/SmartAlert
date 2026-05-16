@@ -46,7 +46,7 @@ namespace TSMapEditor.AI
         private readonly ManualResetEventSlim toolResultsReady = new ManualResetEventSlim(false);
         private CancellationTokenSource currentCts;            // For cancel button support
 
-        private const int MaxAgentIterations = 30;
+        private const int MaxAgentIterations = 80;
         private const int MaxHistoryMessages = 40;             // Sliding window to prevent token overflow
         private string lastUserMessage;                        // For quality checker player count detection
 
@@ -390,9 +390,15 @@ namespace TSMapEditor.AI
 - 不确定意图时，先用文字询问确认。
 
 当前场景: {theaterName}
-每次工具执行后你会收到执行结果和当前地图状态，根据这些信息决定下一步操作。
+每次工具执行后你会收到执行结果和[当前地图状态]，其中包含建筑、树木、载具、步兵的实时数量。
+如果发现数量异常变化（比如突然减少），说明可能发生了撤销操作，你需要根据当前实际状态调整后续计划。
 
-=== 设计原则（不是步骤！自由发挥，但遵守原则）===
+=== 设计原则（灵活运用，不要机械执行）===
+
+**核心**
+- 好的地图应该有丰富的地形层次、合理的资源分布、自然的装饰
+- 没有固定流程，根据用户需求灵活设计。你可以按任意顺序使用工具
+- 出生点附近应留足空间让玩家展开基地（约8格半径），矿石应偏移放置（离出生点5-10格）而非直接覆盖
 
 **地形**
 - 调用 get_map_info 了解可用素材
@@ -400,22 +406,41 @@ namespace TSMapEditor.AI
 - 用 create_plateau 制造高低差增加战术深度
 - fill_terrain 只支持 LAT 地面类型: grass, dark_grass, rough_grass, sand, pavement, snow, ice
 
-**玩家**
-- 出生点分布要对称公平，对角分布效果最佳
-- 每个出生点旁边放 1-2 片矿石（偏移 5-8%，不在同一位置）
-- 出生点周围保持空旷（不放树木和装饰物），让玩家能展开基地
-
-**交通与装饰**
-- 用道路连接出生点和中央区域
-- 树木分散在地图各处（远离出生点）
-- 装饰物用 sparse 密度
-- 自由安排位置和数量，让地图看起来自然而不是机械排列
+**效率**
+- 使用 place_buildings（批量）代替多次 place_building（单个），一次放置多个建筑
+- 使用 place_units（批量）代替多次 place_unit（单个），一次放置多个单位
+- 下方有常用建筑/单位代码表，优先使用已知代码，减少 search_units 调用
+- search_units 仅在需要不在代码表中的特殊单位时使用
 
 **创意**
 - 给地图起一个有创意的英文名
 - 不要拘泥于模板，根据地图尺寸和用户要求灵活设计
 - 可以在任何合理位置创建多个不同大小的高地
-- 地形变化要自然过渡（比如高地旁边铺 sand 模拟泥沙）
+- 地形变化要自然过渡
+
+=== 常用建筑代码（直接使用，无需搜索）===
+建造厂: GACNST(盟军) NACNST(苏军) YACNST(厄普西隆) FACNST(风暴)
+兵工厂: GAWEAP(盟军) NAWEAP(苏军) YAWEAP(厄普西隆) FAWEAP(风暴)
+矿厂: GAREFN(盟军) NAREFN(苏军) YAREFN(厄普西隆) FAREFN(风暴)
+电厂: GAPOWR(盟军) NAPOWR(苏军) YAPOWR(厄普西隆) FAPOWR(风暴)
+兵营: GAPILE(盟军) NAHAND(苏军) YABRCK(厄普西隆) FAPILE(风暴)
+防御塔: GAGUN(盟军炮塔) NCSENT(苏军哨兵炮) YAPSYT(厄普西隆)
+防空: NASAM(防空炮) GACSPH(盟军) YAGGUN(厄普西隆)
+高级防御: NATBNK(坦克碉堡) NABNKR(战斗碉堡) GAWALL(围墙) NAWALL(苏军墙)
+中立建筑: CAOILD(油井) CAHOSP(医院) CALAB(科技实验室) CAARMR(维修厂)
+中立装饰: CAFARM01-08(农场) CACIVB(民房) CACHUR(教堂) CAGAS01(加油站)
+科技建筑: CAMISL(导弹发射井) CATUR(炮台) CAART(火炮) CAHBNK(直升机库)
+
+=== 常用载具代码 ===
+盟军: MTNK(中型坦克) SREF(光棱坦克) MGTK(磁暴坦克) FV(多功能步兵车)
+苏军: HTNK(犀牛坦克) APOC(天启坦克) TTNK(恐怖机器人) V3(V3火箭车)
+厄普西隆: LTNK(突击坦克) YTNK(盖特坦克) MIND(磁控坦克)
+中立: TRUCKA/TRUCKB(卡车) AMBU(救护车) SUVB/SUVW(越野车) CBLC(施工车)
+采矿: HARV(矿车) CMIN(对矿车)
+
+=== 常用步兵代码 ===
+基础: E1(美国大兵) E2(二等兵) SHK(磁暴步兵) DVST(解放者)
+特殊: SNIPE(狙击手) SPY(间谍) YURI(尤里) DESO(辐射工兵)
 
 === 出生点参考位置 ===
 2人: 对角分布，如 (20%,20%) 和 (80%,80%)
