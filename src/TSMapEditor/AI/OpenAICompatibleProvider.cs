@@ -214,7 +214,9 @@ namespace TSMapEditor.AI
 
                 if (!result.HasToolCalls && string.IsNullOrEmpty(result.TextContent))
                 {
-                    throw new InvalidOperationException("AI returned neither text content nor tool calls.");
+                    // AI returned empty — likely stuck after repeated failures. Provide fallback.
+                    result.TextContent = "抱歉，我在执行过程中遇到了一些限制，无法继续。请尝试调整需求（比如减少出生点数量或简化布局），或重新描述你的需求。";
+                    Logger.Log("AI returned empty response — set fallback message");
                 }
 
                 Logger.Log($"AI Response received, text={result.TextContent?.Length ?? 0} chars, toolCalls={result.ToolCalls?.Count ?? 0}");

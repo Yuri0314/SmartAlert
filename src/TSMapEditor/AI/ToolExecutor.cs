@@ -311,16 +311,16 @@ namespace TSMapEditor.AI
             if (tileIndex < 0)
                 return "❌ 找不到 Water 地形类型";
 
-            // Check if river path would cross near any spawn point
-            var spawnZones = GetSpawnExclusionZones(10); // 10-cell buffer for rivers
+            // Check if river path would cross near any spawn point — warn but don't block
+            var spawnZones = GetSpawnExclusionZones(5); // 5-cell buffer (matches base clear radius)
+            var riverWarnings = new List<string>();
             foreach (var zone in spawnZones)
             {
-                // Check if the line segment from→to passes within exclusion radius of spawn
                 double distToLine = PointToSegmentDistance(zone.Center, from, to);
                 if (distToLine < zone.Radius + width / 2)
                 {
-                    return $"❌ 河流路径会穿过出生点({zone.Center.X},{zone.Center.Y})附近（距离{distToLine:F0}格）。" +
-                           $"请调整河流起止点，确保河流不穿过任何出生点。";
+                    var pct = CellToPercentage(zone.Center);
+                    riverWarnings.Add($"P({pct.Item1}%,{pct.Item2}%)距{distToLine:F0}格");
                 }
             }
 
@@ -331,7 +331,11 @@ namespace TSMapEditor.AI
 
             mutationManager.PerformMutation(mutation);
 
-            return $"✓ 已绘制河流从 {GetEndpointDescription(args, "from")} 到 {GetEndpointDescription(args, "to")}，宽度{width}";
+            string result = $"✓ 已绘制河流从 {GetEndpointDescription(args, "from")} 到 {GetEndpointDescription(args, "to")}，宽度{width}";
+            if (riverWarnings.Count > 0)
+                result += $"\n  ⚠️ 河流靠近出生点: {string.Join(", ", riverWarnings)}。请确保这些出生点仍有足够展开空间。";
+
+            return result;
         }
 
         /// <summary>
