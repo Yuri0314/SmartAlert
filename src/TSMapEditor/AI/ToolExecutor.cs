@@ -433,6 +433,8 @@ namespace TSMapEditor.AI
 
             // Validate terrain: don't place on water or slopes
             var validatedPos = FindNearestValidCell(positions[0]);
+            if (validatedPos.X < 0)
+                return $"⏭ 跳过 {resolvedName}：目标位置在水面/斜坡上且附近无可用陆地";
             if (validatedPos != positions[0])
             {
                 positions = new List<Point2D> { validatedPos };
@@ -533,6 +535,12 @@ namespace TSMapEditor.AI
 
                     // Validate terrain: don't place on water or slopes
                     var validatedPos = FindNearestValidCell(pos);
+                    if (validatedPos.X < 0)
+                    {
+                        errors.Add($"{resolvedName}(水面/斜坡无可用陆地)");
+                        failCount++;
+                        continue;
+                    }
                     if (validatedPos != pos)
                     {
                         pos = validatedPos;
@@ -585,7 +593,35 @@ namespace TSMapEditor.AI
                 $"清除出生点{playerIndex + 1}周围障碍物");
             mutationManager.PerformMutation(clearMutation);
 
-            return $"✓ 已设置玩家{playerIndex + 1}出生点在 {GetPositionDescription(args)}（已自动清除周围障碍物）";
+            // Build distance feedback to existing spawn points
+            var distanceInfo = new List<string>();
+            bool hasCloseWarning = false;
+            for (int i = 0; i <= 7; i++)
+            {
+                if (i == playerIndex) continue;
+                var wp = map.Waypoints.FirstOrDefault(w => w.Identifier == i);
+                if (wp == null || wp.Position.X < 0) continue;
+                int dx = pos.X - wp.Position.X;
+                int dy = pos.Y - wp.Position.Y;
+                int dist = (int)Math.Sqrt(dx * dx + dy * dy);
+                var otherPct = CellToPercentage(wp.Position);
+                string entry = $"P{i + 1}({otherPct.Item1}%,{otherPct.Item2}%)={dist}格";
+                if (dist < 40)
+                {
+                    entry += "⚠️近";
+                    hasCloseWarning = true;
+                }
+                distanceInfo.Add(entry);
+            }
+
+            var myPct = CellToPercentage(pos);
+            string result = $"✓ 已设置玩家{playerIndex + 1}出生点在 {GetPositionDescription(args)}({myPct.Item1}%,{myPct.Item2}%)（已自动清除周围障碍物）";
+            if (distanceInfo.Count > 0)
+                result += $"\n  距离: {string.Join(", ", distanceInfo)}";
+            if (hasCloseWarning)
+                result += "\n  ⚠️ 存在距离过近的出生点(<40格)，建议调整以确保基地展开空间";
+
+            return result;
         }
 
         private string ExecutePlaceOre(JsonElement args)
@@ -1093,8 +1129,8 @@ namespace TSMapEditor.AI
         }
 
         /// <summary>
-        /// Finds the nearest valid placement cell by spiraling outward from the given position.
-        /// Returns the original position if no valid cell is found within the search radius.
+        /// Finds the nearest valid placement cell (not water, not slope).
+        /// Returns Point2D(-1,-1) if no valid cell is found, signaling to SKIP placement.
         /// </summary>
         private Point2D FindNearestValidCell(Point2D pos, int maxRadius = 10)
         {
@@ -1106,14 +1142,14 @@ namespace TSMapEditor.AI
                 {
                     for (int dx = -r; dx <= r; dx++)
                     {
-                        if (Math.Abs(dx) != r && Math.Abs(dy) != r) continue; // Only check perimeter
+                        if (Math.Abs(dx) != r && Math.Abs(dy) != r) continue;
                         var candidate = new Point2D(pos.X + dx, pos.Y + dy);
                         if (IsValidPlacementCell(candidate))
                             return candidate;
                     }
                 }
             }
-            return pos; // Fallback to original
+            return new Point2D(-1, -1); // No valid land found — caller should skip placement
         }
 
         // ─── Description Helpers ────────────────────────────────────
@@ -1157,17 +1193,20 @@ namespace TSMapEditor.AI
         /// </summary>
         private string GetMapStateSummary()
         {
-            // Spawn points
+            // Spawn points with percentage coordinates
             int spawnCount = map.Waypoints.Count(wp => wp.Identifier >= 0 && wp.Identifier <= 7);
             var spawnDetails = new List<string>();
             for (int i = 0; i <= 7; i++)
             {
                 var wp = map.Waypoints.FirstOrDefault(w => w.Identifier == i);
                 if (wp != null && wp.Position.X >= 0)
-                    spawnDetails.Add($"P{i + 1}✓");
+                {
+                    var pct = CellToPercentage(wp.Position);
+                    spawnDetails.Add($"P{i + 1}({pct.Item1}%,{pct.Item2}%)");
+                }
             }
             string spawnStatus = spawnCount > 0
-                ? $"出生点: {string.Join(" ", spawnDetails)} ({spawnCount}个)"
+                ? $"出生点: {string.Join(" ", spawnDetails)}"
                 : "出生点: 无";
 
             // Object counts from direct map collections
@@ -1177,6 +1216,23 @@ namespace TSMapEditor.AI
             int infantryCount = map.Infantry.Count;
 
             return $"[当前地图状态] {spawnStatus} | 建筑:{buildingCount} 树木:{treeCount} 载具:{vehicleCount} 步兵:{infantryCount}";
+        }
+
+        /// <summary>
+        /// Converts isometric cell coordinates to approximate percentage (0-100) for AI readability.
+        /// </summary>
+        private (int, int) CellToPercentage(Point2D cellPos)
+        {
+            int center = positionResolver.Center;
+            int radius = positionResolver.DiamondRadius;
+            int safeRadius = (int)(radius * 0.85);
+            if (safeRadius < 1) safeRadius = 1;
+
+            int xPct = 50 + (int)((cellPos.X - center) * 50.0 / safeRadius);
+            int yPct = 50 + (int)((cellPos.Y - center) * 50.0 / safeRadius);
+            xPct = Math.Max(0, Math.Min(100, xPct));
+            yPct = Math.Max(0, Math.Min(100, yPct));
+            return (xPct, yPct);
         }
         // ─── Tile Set Placement ──────────────────────────────────────
 
