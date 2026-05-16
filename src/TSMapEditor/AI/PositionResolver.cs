@@ -59,23 +59,23 @@ namespace TSMapEditor.AI
             var (xPct, yPct) = position.ToLowerInvariant() switch
             {
                 "center" => (50, 50),
-                "north" => (50, 15),
-                "south" => (50, 85),
-                "east" => (85, 50),
-                "west" => (15, 50),
-                "northwest" => (25, 25),
-                "northeast" => (75, 25),
-                "southwest" => (25, 75),
-                "southeast" => (75, 75),
+                "north" => (50, 10),
+                "south" => (50, 90),
+                "east" => (90, 50),
+                "west" => (10, 50),
+                "northwest" => (15, 15),
+                "northeast" => (85, 15),
+                "southwest" => (15, 85),
+                "southeast" => (85, 85),
                 // Aliases
-                "top" => (50, 15),
-                "bottom" => (50, 85),
-                "left" => (15, 50),
-                "right" => (85, 50),
-                "top_left" => (25, 25),
-                "top_right" => (75, 25),
-                "bottom_left" => (25, 75),
-                "bottom_right" => (75, 75),
+                "top" => (50, 10),
+                "bottom" => (50, 90),
+                "left" => (10, 50),
+                "right" => (90, 50),
+                "top_left" => (15, 15),
+                "top_right" => (85, 15),
+                "bottom_left" => (15, 85),
+                "bottom_right" => (85, 85),
                 _ => (50, 50), // Unknown → center
             };
 
@@ -101,8 +101,8 @@ namespace TSMapEditor.AI
 
             // Map percentage to offset from center
             // 50% → 0 offset, 0% → -radius, 100% → +radius
-            // But we use a reduced radius (70%) to keep things safely inside
-            int safeRadius = (int)(radius * 0.70);
+            // Use 85% of radius to keep things safely inside the diamond
+            int safeRadius = (int)(radius * 0.85);
 
             double xOffset = (xPct - 50.0) / 50.0 * safeRadius;
             double yOffset = (yPct - 50.0) / 50.0 * safeRadius;

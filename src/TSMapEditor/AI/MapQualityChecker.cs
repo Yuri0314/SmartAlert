@@ -43,6 +43,7 @@ namespace TSMapEditor.AI
             {
                 CheckSpawnPoints(expectedPlayers, fixes);
                 CheckOreNearSpawns(fixes);
+                CheckSpawnSpacing(fixes);
             }
 
             CheckTerrainDiversity(fixes);
@@ -79,24 +80,33 @@ namespace TSMapEditor.AI
             }
 
             // Detect map generation patterns
-            // "2人" "2v2" "4人" "4v4" "1v1" "3v3" "2人对战" etc.
-            if (msg.Contains("1v1") || msg.Contains("1人") || msg.Contains("单人"))
+            // NvM patterns: "1v3" "1v2" "2v3" etc.
+            var nvmMatch = System.Text.RegularExpressions.Regex.Match(msg, @"(\d+)\s*[vV]\s*(\d+)");
+            if (nvmMatch.Success)
+            {
+                int n = int.Parse(nvmMatch.Groups[1].Value);
+                int m = int.Parse(nvmMatch.Groups[2].Value);
+                return Math.Min(n + m, 8); // Cap at 8 players
+            }
+
+            // "2人" "4人" "2v2" "4v4" "1v1" "3v3" "2人对战" etc.
+            if (msg.Contains("1人") || msg.Contains("单人"))
                 return 2; // 1v1 still needs 2 spawn points
 
-            if (msg.Contains("2v2") || msg.Contains("4人"))
+            if (msg.Contains("4人"))
                 return 4;
 
-            if (msg.Contains("3v3") || msg.Contains("6人"))
+            if (msg.Contains("6人"))
                 return 6;
 
-            if (msg.Contains("4v4") || msg.Contains("8人"))
+            if (msg.Contains("8人"))
                 return 8;
 
             if (msg.Contains("2人") || msg.Contains("双人"))
                 return 2;
 
             // Generic "generate map" without player count
-            if (msg.Contains("生成") || msg.Contains("创建") || msg.Contains("做一张"))
+            if (msg.Contains("生成") || msg.Contains("创建") || msg.Contains("做一张") || msg.Contains("做一个"))
                 return 2; // Default to 2 players
 
             return 0; // Not a map generation request
@@ -170,6 +180,33 @@ namespace TSMapEditor.AI
                         $"{{\"x_pct\": {oreXPct}, \"y_pct\": {oreYPct}, \"amount\": \"medium\", \"type\": \"ore\"}}",
                         $"为玩家{playerIndex + 1}补充矿石"
                     ));
+                }
+            }
+        }
+
+        // ─── Check: Spawn Spacing ──────────────────────────────────
+
+        private void CheckSpawnSpacing(List<QualityFix> fixes)
+        {
+            var spawns = GetSpawnPositions();
+            if (spawns.Count < 2) return;
+
+            int minDistance = positionResolver.DiamondRadius / 3; // At least 1/3 of map radius apart
+
+            for (int i = 0; i < spawns.Count; i++)
+            {
+                for (int j = i + 1; j < spawns.Count; j++)
+                {
+                    int dx = spawns[i].pos.X - spawns[j].pos.X;
+                    int dy = spawns[i].pos.Y - spawns[j].pos.Y;
+                    double dist = Math.Sqrt(dx * dx + dy * dy);
+
+                    if (dist < minDistance)
+                    {
+                        Logger.Log($"MapQualityChecker: Spawn {spawns[i].playerIndex} and {spawns[j].playerIndex} too close ({dist:F0} cells, min={minDistance})");
+                        // We can't easily auto-fix spawn positions without knowing the intended layout,
+                        // so we log a warning. The improved system prompt should prevent this.
+                    }
                 }
             }
         }

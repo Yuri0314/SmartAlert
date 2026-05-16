@@ -311,6 +311,19 @@ namespace TSMapEditor.AI
             if (tileIndex < 0)
                 return "❌ 找不到 Water 地形类型";
 
+            // Check if river path would cross near any spawn point
+            var spawnZones = GetSpawnExclusionZones(10); // 10-cell buffer for rivers
+            foreach (var zone in spawnZones)
+            {
+                // Check if the line segment from→to passes within exclusion radius of spawn
+                double distToLine = PointToSegmentDistance(zone.Center, from, to);
+                if (distToLine < zone.Radius + width / 2)
+                {
+                    return $"❌ 河流路径会穿过出生点({zone.Center.X},{zone.Center.Y})附近（距离{distToLine:F0}格）。" +
+                           $"请调整河流起止点，确保河流不穿过任何出生点。";
+                }
+            }
+
             Logger.Log($"ToolExecutor draw_river: from=({from.X},{from.Y}) to=({to.X},{to.Y}) width={width}");
 
             var mutation = new AIDrawPathMutation(mutationTarget, from.X, from.Y, to.X, to.Y,
@@ -319,6 +332,25 @@ namespace TSMapEditor.AI
             mutationManager.PerformMutation(mutation);
 
             return $"✓ 已绘制河流从 {GetEndpointDescription(args, "from")} 到 {GetEndpointDescription(args, "to")}，宽度{width}";
+        }
+
+        /// <summary>
+        /// Calculates the minimum distance from a point to a line segment.
+        /// Used to check if rivers/roads would cross spawn points.
+        /// </summary>
+        private static double PointToSegmentDistance(Point2D point, Point2D segA, Point2D segB)
+        {
+            double dx = segB.X - segA.X;
+            double dy = segB.Y - segA.Y;
+            double lenSq = dx * dx + dy * dy;
+            if (lenSq < 1) return Math.Sqrt((point.X - segA.X) * (point.X - segA.X) + (point.Y - segA.Y) * (point.Y - segA.Y));
+
+            double t = Math.Max(0, Math.Min(1, ((point.X - segA.X) * dx + (point.Y - segA.Y) * dy) / lenSq));
+            double projX = segA.X + t * dx;
+            double projY = segA.Y + t * dy;
+            double pdx = point.X - projX;
+            double pdy = point.Y - projY;
+            return Math.Sqrt(pdx * pdx + pdy * pdy);
         }
 
         private string ExecutePlaceBuilding(JsonElement args)
@@ -397,6 +429,14 @@ namespace TSMapEditor.AI
                     }
                     break;
                 }
+            }
+
+            // Validate terrain: don't place on water or slopes
+            var validatedPos = FindNearestValidCell(positions[0]);
+            if (validatedPos != positions[0])
+            {
+                positions = new List<Point2D> { validatedPos };
+                relocateNote += "（已避开水面/斜坡）";
             }
 
             var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
@@ -489,6 +529,15 @@ namespace TSMapEditor.AI
                             }
                             break;
                         }
+                    }
+
+                    // Validate terrain: don't place on water or slopes
+                    var validatedPos = FindNearestValidCell(pos);
+                    if (validatedPos != pos)
+                    {
+                        pos = validatedPos;
+                        positions = new List<Point2D> { pos };
+                        spawnWarnings.Add($"{resolvedName}→已避开水面/斜坡");
                     }
 
                     var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
@@ -994,6 +1043,77 @@ namespace TSMapEditor.AI
                     zones.Add((wp.Position, radius));
             }
             return zones;
+        }
+
+        /// <summary>
+        /// Checks if a cell is valid for placing buildings/units:
+        /// - Cell exists on map
+        /// - Not a water tile
+        /// - Not on a slope (height transition)
+        /// </summary>
+        private bool IsValidPlacementCell(Point2D pos)
+        {
+            var cell = map.GetTile(pos);
+            if (cell == null) return false;
+
+            // Check for water tiles
+            if (cell.TileIndex > 0 && theaterGraphics != null)
+            {
+                try
+                {
+                    var tileImage = theaterGraphics.GetTileGraphics(cell.TileIndex);
+                    if (tileImage != null)
+                    {
+                        int tileSetId = tileImage.TileSetId;
+                        var theater = theaterGraphics.Theater;
+                        if (theater != null && tileSetId >= 0 && tileSetId < theater.TileSets.Count)
+                        {
+                            var tileSet = theater.TileSets[tileSetId];
+                            if (tileSet.SetName != null &&
+                                tileSet.SetName.Contains("Water", StringComparison.OrdinalIgnoreCase))
+                                return false;
+                        }
+                    }
+                }
+                catch { /* Tile index out of range — treat as valid */ }
+            }
+
+            // Check for height transitions (slopes) by comparing with neighbors
+            int myHeight = cell.Level;
+            int[] dxs = { -1, 1, 0, 0 };
+            int[] dys = { 0, 0, -1, 1 };
+            for (int i = 0; i < 4; i++)
+            {
+                var neighbor = map.GetTile(pos.X + dxs[i], pos.Y + dys[i]);
+                if (neighbor != null && neighbor.Level != myHeight)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Finds the nearest valid placement cell by spiraling outward from the given position.
+        /// Returns the original position if no valid cell is found within the search radius.
+        /// </summary>
+        private Point2D FindNearestValidCell(Point2D pos, int maxRadius = 10)
+        {
+            if (IsValidPlacementCell(pos)) return pos;
+
+            for (int r = 1; r <= maxRadius; r++)
+            {
+                for (int dy = -r; dy <= r; dy++)
+                {
+                    for (int dx = -r; dx <= r; dx++)
+                    {
+                        if (Math.Abs(dx) != r && Math.Abs(dy) != r) continue; // Only check perimeter
+                        var candidate = new Point2D(pos.X + dx, pos.Y + dy);
+                        if (IsValidPlacementCell(candidate))
+                            return candidate;
+                    }
+                }
+            }
+            return pos; // Fallback to original
         }
 
         // ─── Description Helpers ────────────────────────────────────
