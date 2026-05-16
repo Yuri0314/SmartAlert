@@ -387,8 +387,8 @@ namespace TSMapEditor.AI
                 try
                 {
                     string name = item.GetProperty("name").GetString();
-                    int xPct = item.TryGetProperty("x_pct", out var xp) ? xp.GetInt32() : 50;
-                    int yPct = item.TryGetProperty("y_pct", out var yp) ? yp.GetInt32() : 50;
+                    int xPct = item.TryGetProperty("x_pct", out var xp) ? ParseJsonInt(xp, 50) : 50;
+                    int yPct = item.TryGetProperty("y_pct", out var yp) ? ParseJsonInt(yp, 50) : 50;
                     string ownerName = item.TryGetProperty("owner", out var ow) ? ow.GetString() ?? "Neutral" : "Neutral";
 
                     var pos = positionResolver.Resolve(null, xPct, yPct);
@@ -831,7 +831,96 @@ namespace TSMapEditor.AI
             }
         }
 
+        /// <summary>
+        /// Generates a categorized codebook string from the actually-loaded game rules.
+        /// This is included in the system prompt so the AI knows valid INI names.
+        /// </summary>
+        public string GetDynamicCodebook()
+        {
+            var sb = new System.Text.StringBuilder();
+
+            // --- Neutral/Capturable buildings (CA prefix, tech buildings) ---
+            sb.AppendLine("=== 中立/可占领建筑 ===");
+            int neutralCount = 0;
+            foreach (var bt in map.Rules.BuildingTypes)
+            {
+                if (bt.ININame.StartsWith("CA", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(bt.Name))
+                {
+                    // Only include functional/notable ones, skip too many decorations
+                    string lower = bt.ININame.ToLowerInvariant();
+                    if (lower.Contains("oild") || lower.Contains("hosp") || lower.Contains("lab") ||
+                        lower.Contains("mach") || lower.Contains("powr") || lower.Contains("airp") ||
+                        lower.Contains("sam") || lower.Contains("hmg") || lower.Contains("fort") ||
+                        lower.Contains("hse") || lower.Contains("eur") || lower.Contains("farm") ||
+                        lower.Contains("gas") || lower.Contains("park") || lower.Contains("army"))
+                    {
+                        sb.AppendLine($"  {bt.ININame} = {bt.Name}");
+                        neutralCount++;
+                        if (neutralCount >= 30) break;
+                    }
+                }
+            }
+
+            // --- Civilian vehicles ---
+            sb.AppendLine("\n=== 中立载具（装饰用）===");
+            int civVehCount = 0;
+            foreach (var vt in map.Rules.UnitTypes)
+            {
+                string ini = vt.ININame.ToUpperInvariant();
+                if ((ini.StartsWith("CIV") || ini.StartsWith("TRUCK") || ini.StartsWith("SUV") ||
+                     ini.StartsWith("BUS") || ini.StartsWith("COP") || ini.StartsWith("TAXI") ||
+                     ini.StartsWith("AMBU") || ini.StartsWith("LIMO") || ini.StartsWith("PICK")) &&
+                    !string.IsNullOrEmpty(vt.Name))
+                {
+                    sb.AppendLine($"  {vt.ININame} = {vt.Name}");
+                    civVehCount++;
+                    if (civVehCount >= 15) break;
+                }
+            }
+
+            // --- Faction defense structures (turrets, walls, etc.) ---
+            sb.AppendLine("\n=== 防御建筑（需要指定所属方）===");
+            int defCount = 0;
+            foreach (var bt in map.Rules.BuildingTypes)
+            {
+                string ini = bt.ININame.ToUpperInvariant();
+                string name = (bt.Name ?? "").ToLowerInvariant();
+                if ((name.Contains("turret") || name.Contains("wall") || name.Contains("pillar") ||
+                     name.Contains("gate") || name.Contains("bunker") || name.Contains("tower") ||
+                     name.Contains("sentry") || name.Contains("sam") || name.Contains("cannon") ||
+                     name.Contains("defense") || name.Contains("flak")) &&
+                    !ini.StartsWith("CA") && !string.IsNullOrEmpty(bt.Name))
+                {
+                    sb.AppendLine($"  {bt.ININame} = {bt.Name}");
+                    defCount++;
+                    if (defCount >= 20) break;
+                }
+            }
+
+            // --- Note about faction production buildings ---
+            sb.AppendLine("\n=== 注意 ===");
+            sb.AppendLine("玩家阵营生产建筑（建造厂、兵工厂、矿厂等）属于特定阵营，");
+            sb.AppendLine("只在用户明确要求\"给玩家预置基地\"时才应放置。");
+            sb.AppendLine("地图装饰应使用中立建筑(CA前缀)和中立载具。");
+            sb.AppendLine("用 search_units 搜索你需要的任何特定单位。");
+
+            return sb.ToString();
+        }
+
         // ─── Description Helpers ────────────────────────────────────
+
+        /// <summary>
+        /// Parses a JSON value as int, handling both Number and String types.
+        /// AI models sometimes send numbers as strings (e.g. "50" instead of 50).
+        /// </summary>
+        private static int ParseJsonInt(JsonElement element, int fallback)
+        {
+            if (element.ValueKind == JsonValueKind.Number)
+                return element.GetInt32();
+            if (element.ValueKind == JsonValueKind.String && int.TryParse(element.GetString(), out int result))
+                return result;
+            return fallback;
+        }
 
         private string GetPositionDescription(JsonElement args)
         {
