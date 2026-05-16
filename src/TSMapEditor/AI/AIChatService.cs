@@ -192,6 +192,7 @@ namespace TSMapEditor.AI
                     chatHistory.Add(ChatMessage.Assistant(message));
                     MessageReceived?.Invoke(this, message);
                     IsBusy = false;
+                    if (mutationManager != null) mutationManager.IsLocked = false;
                     BusyStateChanged?.Invoke(this, false);
                     return;
                 }
@@ -205,6 +206,7 @@ namespace TSMapEditor.AI
 
                     ErrorOccurred?.Invoke(this, error);
                     IsBusy = false;
+                    if (mutationManager != null) mutationManager.IsLocked = false;
                     BusyStateChanged?.Invoke(this, false);
                     return;
                 }
@@ -261,6 +263,7 @@ namespace TSMapEditor.AI
             TrimHistory();
 
             IsBusy = true;
+            if (mutationManager != null) mutationManager.IsLocked = true;
             BusyStateChanged?.Invoke(this, true);
 
             currentCts = new CancellationTokenSource(TimeSpan.FromSeconds(300));

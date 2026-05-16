@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace TSMapEditor.Mutations
 {
@@ -11,6 +11,12 @@ namespace TSMapEditor.Mutations
         public List<IMutation> RedoList { get; } = new List<IMutation>();
 
         /// <summary>
+        /// When true, Undo and Redo are blocked (e.g., during AI generation).
+        /// PerformMutation still works so the AI can execute mutations normally.
+        /// </summary>
+        public bool IsLocked { get; set; }
+
+        /// <summary>
         /// Performs a new mutation on the map.
         /// </summary>
         /// <param name="mutation">The mutation to perform.</param>
@@ -21,7 +27,7 @@ namespace TSMapEditor.Mutations
             UndoList.Add(mutation);
         }
 
-        public bool CanUndo() => UndoList.Count > 0;
+        public bool CanUndo() => !IsLocked && UndoList.Count > 0;
 
         /// <summary>
         /// Undoes the last mutation performed to the map, or the last chain of mutations
@@ -56,7 +62,7 @@ namespace TSMapEditor.Mutations
         /// </summary>
         public void UndoOne()
         {
-            if (!CanUndo())
+            if (IsLocked || UndoList.Count == 0)
                 return;
 
             int lastUndoIndex = UndoList.Count - 1;
@@ -65,7 +71,7 @@ namespace TSMapEditor.Mutations
             UndoList.RemoveAt(lastUndoIndex);
         }
 
-        public bool CanRedo() => RedoList.Count > 0;
+        public bool CanRedo() => !IsLocked && RedoList.Count > 0;
 
         /// <summary>
         /// Redoes the last un-done mutation on the map.
@@ -88,3 +94,4 @@ namespace TSMapEditor.Mutations
         }
     }
 }
+

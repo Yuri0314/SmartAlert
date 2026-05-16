@@ -52,7 +52,7 @@ namespace TSMapEditor.AI
                 using var doc = JsonDocument.Parse(argumentsJson);
                 var args = doc.RootElement;
 
-                return toolName switch
+                string result = toolName switch
                 {
                     "get_map_info" => ExecuteGetMapInfo(),
                     "fill_terrain" => ExecuteFillTerrain(args),
@@ -71,6 +71,17 @@ namespace TSMapEditor.AI
                     "place_tile" => ExecutePlaceTile(args),
                     _ => $"❌ 未知工具: {toolName}"
                 };
+
+                // Append map state summary to all mutation results so the AI
+                // always sees the current global state after each operation.
+                // Skip for query-only tools and errors.
+                bool isQueryOnly = toolName == "get_map_info" || toolName == "search_units";
+                if (!isQueryOnly && !result.StartsWith("❌"))
+                {
+                    result += "\n" + GetMapStateSummary();
+                }
+
+                return result;
             }
             catch (JsonException ex)
             {
@@ -377,7 +388,7 @@ namespace TSMapEditor.AI
                 $"清除出生点{playerIndex + 1}周围障碍物");
             mutationManager.PerformMutation(clearMutation);
 
-            return $"✓ 已设置玩家{playerIndex + 1}出生点在 {GetPositionDescription(args)}（已自动清除周围障碍物）\n{GetMapStateSummary()}";
+            return $"✓ 已设置玩家{playerIndex + 1}出生点在 {GetPositionDescription(args)}（已自动清除周围障碍物）";
         }
 
         private string ExecutePlaceOre(JsonElement args)
@@ -435,7 +446,7 @@ namespace TSMapEditor.AI
                 }
             }
 
-            return $"✓ 已在 {GetPositionDescription(args)} 放置{amount}{(type == "gems" ? "宝石" : "矿石")}{minePlaced}\n{GetMapStateSummary()}";
+            return $"✓ 已在 {GetPositionDescription(args)} 放置{amount}{(type == "gems" ? "宝石" : "矿石")}{minePlaced}";
         }
 
         private string ExecutePlaceTrees(JsonElement args)
@@ -770,6 +781,7 @@ namespace TSMapEditor.AI
         /// </summary>
         private string GetMapStateSummary()
         {
+            // Spawn points
             int spawnCount = map.Waypoints.Count(wp => wp.Identifier >= 0 && wp.Identifier <= 7);
             var spawnDetails = new List<string>();
             for (int i = 0; i <= 7; i++)
@@ -778,12 +790,17 @@ namespace TSMapEditor.AI
                 if (wp != null && wp.Position.X >= 0)
                     spawnDetails.Add($"P{i + 1}✓");
             }
-
             string spawnStatus = spawnCount > 0
                 ? $"出生点: {string.Join(" ", spawnDetails)} ({spawnCount}个)"
                 : "出生点: 无";
 
-            return $"[当前地图状态] {spawnStatus}";
+            // Object counts from direct map collections
+            int buildingCount = map.Structures.Count;
+            int treeCount = map.TerrainObjects.Count;
+            int vehicleCount = map.Units.Count;
+            int infantryCount = map.Infantry.Count;
+
+            return $"[当前地图状态] {spawnStatus} | 建筑:{buildingCount} 树木:{treeCount} 载具:{vehicleCount} 步兵:{infantryCount}";
         }
         // ─── Tile Set Placement ──────────────────────────────────────
 
