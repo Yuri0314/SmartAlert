@@ -261,7 +261,19 @@ namespace TSMapEditor.AI
             var mutation = new AICreatePlateauMutation(mutationTarget, pos.X, pos.Y, radius, height);
             mutationManager.PerformMutation(mutation);
 
-            return $"✓ 已在 {GetPositionDescription(args)} 创建{size}高地，半径{radius}，高度{height}";
+            // Warn if plateau edge/slope overlaps any spawn point
+            string spawnWarning = "";
+            foreach (var zone in GetSpawnExclusionZones(6))
+            {
+                int dx = pos.X - zone.Center.X;
+                int dy = pos.Y - zone.Center.Y;
+                double dist = Math.Sqrt(dx * dx + dy * dy);
+                // Check if spawn is in the slope ring (between radius-3 and radius+3)
+                if (dist >= radius - 3 && dist <= radius + 3)
+                    spawnWarning = "\n⚠️ 高地斜坡可能覆盖出生点，玩家无法在坡上建造建筑";
+            }
+
+            return $"✓ 已在 {GetPositionDescription(args)} 创建{size}高地，半径{radius}，高度{height}{spawnWarning}";
         }
 
         private string ExecuteDrawRoad(JsonElement args)
@@ -362,11 +374,36 @@ namespace TSMapEditor.AI
             if (positions.Count == 0)
                 return $"❌ 位置 ({pos.X},{pos.Y}) 不在地图有效区域内";
 
+            // Auto-relocate away from spawn exclusion zones
+            string relocateNote = "";
+            var finalPos = positions[0];
+            foreach (var zone in GetSpawnExclusionZones())
+            {
+                int sdx = finalPos.X - zone.Center.X;
+                int sdy = finalPos.Y - zone.Center.Y;
+                int distSq = sdx * sdx + sdy * sdy;
+                if (distSq <= zone.Radius * zone.Radius)
+                {
+                    double dist = Math.Sqrt(distSq);
+                    if (dist < 1) dist = 1;
+                    double scale = (zone.Radius + 2) / dist;
+                    int newX = zone.Center.X + (int)(sdx * scale);
+                    int newY = zone.Center.Y + (int)(sdy * scale);
+                    var relocated = new Point2D(newX, newY);
+                    if (map.GetTile(relocated) != null)
+                    {
+                        positions = new List<Point2D> { relocated };
+                        relocateNote = "（已自动外移避开出生点）";
+                    }
+                    break;
+                }
+            }
+
             var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
                 resolvedName, owner, positions, $"放置 {resolvedName}");
             mutationManager.PerformMutation(mutation);
 
-            return $"✓ 已在 {GetPositionDescription(args)} 放置 {resolvedName}（{owner.ININame}）";
+            return $"✓ 已在 {GetPositionDescription(args)} 放置 {resolvedName}（{owner.ININame}）{relocateNote}";
         }
 
         /// <summary>
@@ -429,14 +466,27 @@ namespace TSMapEditor.AI
 
                     var positions = new List<Point2D> { pos };
 
-                    // Check spawn proximity (warn but don't block)
+                    // Auto-relocate away from spawn exclusion zones
                     foreach (var zone in spawnZones)
                     {
                         int sdx = pos.X - zone.Center.X;
                         int sdy = pos.Y - zone.Center.Y;
-                        if (sdx * sdx + sdy * sdy <= zone.Radius * zone.Radius)
+                        int distSq = sdx * sdx + sdy * sdy;
+                        if (distSq <= zone.Radius * zone.Radius)
                         {
-                            spawnWarnings.Add(resolvedName);
+                            // Push outward from spawn center to just outside the exclusion radius
+                            double dist = Math.Sqrt(distSq);
+                            if (dist < 1) dist = 1;
+                            double scale = (zone.Radius + 2) / dist;
+                            int newX = zone.Center.X + (int)(sdx * scale);
+                            int newY = zone.Center.Y + (int)(sdy * scale);
+                            var relocated = new Point2D(newX, newY);
+                            if (map.GetTile(relocated) != null)
+                            {
+                                pos = relocated;
+                                positions = new List<Point2D> { pos };
+                                spawnWarnings.Add($"{resolvedName}→已自动外移");
+                            }
                             break;
                         }
                     }
@@ -458,9 +508,9 @@ namespace TSMapEditor.AI
             if (failCount > 0)
                 result += $", {failCount}个失败({string.Join(", ", errors)})";
 
-            // Add spawn proximity warnings
+            // Report relocated items so AI knows what happened
             if (spawnWarnings.Count > 0)
-                result += $"\n⚠️ 注意: {string.Join(", ", spawnWarnings.Distinct())} 距离出生点过近(<8格)，可能影响玩家基地展开";
+                result += $"\n📍 {spawnWarnings.Count}个物品因靠近出生点被自动外移: {string.Join(", ", spawnWarnings)}";
 
             return result;
         }
