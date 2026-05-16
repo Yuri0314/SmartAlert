@@ -427,9 +427,10 @@ namespace TSMapEditor.AI
                 var cell = map.GetTile(pos.X, pos.Y);
                 if (cell != null && cell.TerrainObject == null)
                 {
-                    var terrainObj = new TerrainObject(oreMineType, new Point2D(pos.X, pos.Y));
-                    map.AddTerrainObject(terrainObj);
-                    mutationTarget.InvalidateMap();
+                    var mineMutation = new AIPlaceTerrainObjectMutation(mutationTarget,
+                        new List<TerrainType> { oreMineType },
+                        pos.X, pos.Y, 0, 1.0f, "放置矿井");
+                    mutationManager.PerformMutation(mineMutation);
                     minePlaced = " + 生矿机";
                 }
             }
@@ -545,7 +546,7 @@ namespace TSMapEditor.AI
                 _ => 0.04f
             };
 
-            // Build spawn point exclusion zones (larger radius for decorations)
+            // Build spawn point exclusion zones
             const int spawnExclusionRadius = 12;
             var spawnPoints = new List<Point2D>();
             foreach (var wp in map.Waypoints)
@@ -553,10 +554,6 @@ namespace TSMapEditor.AI
                 if (wp.Identifier >= 0 && wp.Identifier <= 7)
                     spawnPoints.Add(wp.Position);
             }
-
-            var random = new Random();
-            int r2 = radius * radius;
-            int placedCount = 0;
 
             // Resolve building types
             var buildingTypes = new List<BuildingType>();
@@ -575,52 +572,12 @@ namespace TSMapEditor.AI
             if (neutralOwner == null)
                 return "❌ 找不到 Neutral 所属方";
 
-            for (int y = pos.Y - radius; y <= pos.Y + radius; y++)
-            {
-                for (int x = pos.X - radius; x <= pos.X + radius; x++)
-                {
-                    int dx = x - pos.X;
-                    int dy = y - pos.Y;
-                    if (dx * dx + dy * dy > r2)
-                        continue;
+            var mutation = new AIPlaceDecorationsMutation(mutationTarget,
+                buildingTypes, neutralOwner, pos.X, pos.Y, radius, densityValue,
+                spawnPoints, spawnExclusionRadius, $"放置装饰物");
+            mutationManager.PerformMutation(mutation);
 
-                    if (random.NextDouble() > densityValue)
-                        continue;
-
-                    // Skip cells near spawn points — leave room for base expansion
-                    bool nearSpawn = false;
-                    foreach (var sp in spawnPoints)
-                    {
-                        if (Math.Abs(x - sp.X) + Math.Abs(y - sp.Y) <= spawnExclusionRadius)
-                        {
-                            nearSpawn = true;
-                            break;
-                        }
-                    }
-                    if (nearSpawn)
-                        continue;
-
-                    var cell = map.GetTile(x, y);
-                    if (cell == null || cell.TerrainObject != null ||
-                        cell.Structures.Count > 0 || cell.Vehicles.Count > 0)
-                        continue;
-
-                    var chosenType = buildingTypes[random.Next(buildingTypes.Count)];
-                    var structure = new Structure(chosenType)
-                    {
-                        Position = new Point2D(x, y),
-                        Owner = neutralOwner,
-                        Facing = (byte)(random.Next(8) * 32),
-                        HP = 256
-                    };
-
-                    map.PlaceBuilding(structure);
-                    placedCount++;
-                }
-            }
-
-            mutationTarget.InvalidateMap();
-            return $"✓ 已在 {GetPositionDescription(args)} 放置{placedCount}个装饰物";
+            return $"✓ 已在 {GetPositionDescription(args)} 放置{density}密度的装饰物";
         }
 
         /// <summary>

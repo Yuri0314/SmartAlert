@@ -149,14 +149,20 @@ namespace TSMapEditor.UI
             tbInput.EnterPressed += (s, e) => SendMessage();
             AddChild(tbInput);
 
-            // Send button
+            // Send button (doubles as Stop button when busy)
             btnSend = new EditorButton(WindowManager);
             btnSend.Name = nameof(btnSend);
             btnSend.Text = Translator.Translate("AIChatPanel.Send", "Send");
             btnSend.Width = 60;
             btnSend.X = tbInput.Right + Padding;
             btnSend.Y = tbInput.Y - 1;
-            btnSend.LeftClick += (s, e) => SendMessage();
+            btnSend.LeftClick += (s, e) =>
+            {
+                if (chatService.IsBusy)
+                    chatService.CancelCurrentOperation();
+                else
+                    SendMessage();
+            };
             AddChild(btnSend);
 
             base.Initialize();
@@ -617,7 +623,11 @@ namespace TSMapEditor.UI
                 {
                     bool busy = pendingBusyState.Value;
                     lblStatus.Text = busy ? Translator.Translate("AIChatPanel.Thinking", "AI thinking...") : (chatService.IsConfigured ? Translator.Translate("AIChatPanel.Ready", "Ready") : Translator.Translate("AIChatPanel.NotConfigured", "Not configured"));
-                    btnSend.AllowClick = !busy;
+                    // Toggle Send/Stop button
+                    btnSend.Text = busy
+                        ? Translator.Translate("AIChatPanel.Stop", "Stop")
+                        : Translator.Translate("AIChatPanel.Send", "Send");
+                    btnSend.AllowClick = true; // Always clickable — Send or Stop
                     tbInput.InputEnabled = !busy;
                     pendingBusyState = null;
                 }

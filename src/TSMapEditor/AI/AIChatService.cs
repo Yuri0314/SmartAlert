@@ -44,6 +44,7 @@ namespace TSMapEditor.AI
         private string pendingFinalMessage;                    // Background → Main: final text response
         private string pendingError;                           // Background → Main: error message
         private readonly ManualResetEventSlim toolResultsReady = new ManualResetEventSlim(false);
+        private CancellationTokenSource currentCts;            // For cancel button support
 
         private const int MaxAgentIterations = 30;
         private const int MaxHistoryMessages = 40;             // Sliding window to prevent token overflow
@@ -151,6 +152,24 @@ namespace TSMapEditor.AI
         }
 
         /// <summary>
+        /// Cancels the current AI operation if one is in progress.
+        /// </summary>
+        public void CancelCurrentOperation()
+        {
+            if (!IsBusy) return;
+
+            try
+            {
+                currentCts?.Cancel();
+                // Also unblock the background thread if it's waiting for tool results
+                toolResultsReady.Set();
+            }
+            catch (ObjectDisposedException) { }
+
+            Logger.Log("AIChatService: Operation cancelled by user.");
+        }
+
+        /// <summary>
         /// Must be called from the main game thread (e.g., in Update()).
         /// Processes pending tool executions and feeds results back to the agent.
         /// </summary>
@@ -244,7 +263,8 @@ namespace TSMapEditor.AI
             IsBusy = true;
             BusyStateChanged?.Invoke(this, true);
 
-            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(300));
+            currentCts = new CancellationTokenSource(TimeSpan.FromSeconds(300));
+            var cts = currentCts;
 
             Task.Run(async () =>
             {
@@ -254,7 +274,14 @@ namespace TSMapEditor.AI
                 }
                 catch (OperationCanceledException)
                 {
-                    lock (syncLock) { pendingError = "AI 请求超时（300秒）。请检查网络连接。"; }
+                    string msg = cts.IsCancellationRequested && !cts.Token.WaitHandle.WaitOne(0)
+                        ? "操作已被用户取消。"
+                        : "AI 请求超时（300秒）。请检查网络连接。";
+                    lock (syncLock)
+                    {
+                        pendingFinalMessage = msg;
+                        agentState = AgentState.Idle;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -263,6 +290,7 @@ namespace TSMapEditor.AI
                 }
                 finally
                 {
+                    currentCts = null;
                     cts.Dispose();
                 }
             });

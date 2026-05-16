@@ -114,17 +114,62 @@ namespace TSMapEditor.AI
             string jsonBody = JsonSerializer.Serialize(requestObj);
             Logger.Log($"AI Request to {endpoint}, model={config.ModelName}, messages={messages.Count}, tools={tools?.Count ?? 0}");
 
-            var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-            request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
+            // Retry logic for transient errors (network issues, 429, 500, 502, 503)
+            const int maxRetries = 2;
+            HttpResponseMessage response = null;
+            string responseBody = null;
 
-            HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken);
-            string responseBody = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
+            for (int attempt = 0; attempt <= maxRetries; attempt++)
             {
-                Logger.Log($"AI API error: {response.StatusCode} - {responseBody}");
-                throw new HttpRequestException($"AI API returned {(int)response.StatusCode}: {responseBody}");
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (attempt > 0)
+                {
+                    int delayMs = 1000 * (int)Math.Pow(2, attempt - 1); // 1s, 2s
+                    Logger.Log($"AI API retry {attempt}/{maxRetries} after {delayMs}ms...");
+                    await Task.Delay(delayMs, cancellationToken);
+                }
+
+                try
+                {
+                    var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                    request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+                    request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
+
+                    response = await httpClient.SendAsync(request, cancellationToken);
+                    responseBody = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode)
+                        break; // Success, exit retry loop
+
+                    int statusCode = (int)response.StatusCode;
+                    bool isRetryable = statusCode == 429 || statusCode >= 500;
+
+                    if (!isRetryable || attempt == maxRetries)
+                    {
+                        Logger.Log($"AI API error: {response.StatusCode} - {responseBody}");
+                        string friendlyMsg = statusCode switch
+                        {
+                            401 => "API Key 无效，请在设置中检查。",
+                            429 => "API 请求过于频繁，请稍后再试。",
+                            >= 500 => $"AI 服务端错误 ({statusCode})，已重试 {attempt} 次。",
+                            _ => $"AI API 返回错误 {statusCode}"
+                        };
+                        throw new HttpRequestException(friendlyMsg);
+                    }
+
+                    Logger.Log($"AI API returned {statusCode}, will retry...");
+                }
+                catch (HttpRequestException) when (attempt < maxRetries)
+                {
+                    // Network error, will retry
+                    Logger.Log($"AI API network error on attempt {attempt + 1}, will retry...");
+                }
+                catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested && attempt < maxRetries)
+                {
+                    // Individual request timeout (not user cancel), will retry
+                    Logger.Log($"AI API request timeout on attempt {attempt + 1}, will retry...");
+                }
             }
 
             return ParseResponse(responseBody);
