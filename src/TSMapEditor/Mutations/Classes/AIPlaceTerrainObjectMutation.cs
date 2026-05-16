@@ -22,9 +22,10 @@ namespace TSMapEditor.Mutations.Classes
         /// <param name="radius">Radius of the circular placement area.</param>
         /// <param name="density">Probability of placing an object on each eligible cell (0.0 to 1.0).</param>
         /// <param name="description">Display description for undo history.</param>
+        /// <param name="exclusionZones">Optional list of (center, radius) zones where objects should NOT be placed (e.g. spawn points).</param>
         public AIPlaceTerrainObjectMutation(IMutationTarget mutationTarget,
             List<TerrainType> terrainTypes, int centerX, int centerY, int radius,
-            float density, string description)
+            float density, string description, List<(Point2D Center, int Radius)> exclusionZones = null)
             : base(mutationTarget)
         {
             this.terrainTypes = terrainTypes ?? throw new ArgumentNullException(nameof(terrainTypes));
@@ -33,6 +34,7 @@ namespace TSMapEditor.Mutations.Classes
             this.radius = Math.Max(1, radius);
             this.density = Math.Max(0.05f, Math.Min(1.0f, density));
             this.description = description;
+            this.exclusionZones = exclusionZones ?? new List<(Point2D, int)>();
         }
 
         // Legacy single-type constructor for backward compatibility
@@ -52,6 +54,7 @@ namespace TSMapEditor.Mutations.Classes
         private readonly int radius;
         private readonly float density;
         private readonly string description;
+        private readonly List<(Point2D Center, int Radius)> exclusionZones;
 
         // Track placed objects for undo
         private List<PlacedTerrainObj> placedObjects;
@@ -78,6 +81,10 @@ namespace TSMapEditor.Mutations.Classes
                     int dx = x - centerX;
                     int dy = y - centerY;
                     if (dx * dx + dy * dy > r2)
+                        continue;
+
+                    // Spawn exclusion zone check
+                    if (IsInExclusionZone(x, y))
                         continue;
 
                     // Density check: skip cells randomly
@@ -113,6 +120,21 @@ namespace TSMapEditor.Mutations.Classes
             }
 
             MutationTarget.InvalidateMap();
+        }
+
+        /// <summary>
+        /// Checks if a position falls within any exclusion zone (e.g. near a spawn point).
+        /// </summary>
+        private bool IsInExclusionZone(int x, int y)
+        {
+            foreach (var zone in exclusionZones)
+            {
+                int dx = x - zone.Center.X;
+                int dy = y - zone.Center.Y;
+                if (dx * dx + dy * dy <= zone.Radius * zone.Radius)
+                    return true;
+            }
+            return false;
         }
 
         public override void Undo()

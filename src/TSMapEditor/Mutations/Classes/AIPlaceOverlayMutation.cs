@@ -65,7 +65,7 @@ namespace TSMapEditor.Mutations.Classes
             int r2 = radius * radius;
 
             // Build spawn point exclusion zones (waypoints 0-7 = player spawn points)
-            const int spawnExclusionRadius = 5;
+            const int spawnExclusionRadius = 8;
             var spawnPoints = new List<Point2D>();
             foreach (var wp in map.Waypoints)
             {

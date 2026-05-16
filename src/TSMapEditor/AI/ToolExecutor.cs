@@ -381,6 +381,8 @@ namespace TSMapEditor.AI
             int successCount = 0;
             int failCount = 0;
             var errors = new List<string>();
+            var spawnWarnings = new List<string>();
+            var spawnZones = GetSpawnExclusionZones();
 
             foreach (var item in itemsArray.EnumerateArray())
             {
@@ -426,6 +428,19 @@ namespace TSMapEditor.AI
                     }
 
                     var positions = new List<Point2D> { pos };
+
+                    // Check spawn proximity (warn but don't block)
+                    foreach (var zone in spawnZones)
+                    {
+                        int sdx = pos.X - zone.Center.X;
+                        int sdy = pos.Y - zone.Center.Y;
+                        if (sdx * sdx + sdy * sdy <= zone.Radius * zone.Radius)
+                        {
+                            spawnWarnings.Add(resolvedName);
+                            break;
+                        }
+                    }
+
                     var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
                         resolvedName, owner, positions, $"批量放置 {resolvedName}");
                     mutationManager.PerformMutation(mutation);
@@ -442,6 +457,11 @@ namespace TSMapEditor.AI
             string result = $"✓ 批量放置{typeName}: {successCount}个成功";
             if (failCount > 0)
                 result += $", {failCount}个失败({string.Join(", ", errors)})";
+
+            // Add spawn proximity warnings
+            if (spawnWarnings.Count > 0)
+                result += $"\n⚠️ 注意: {string.Join(", ", spawnWarnings.Distinct())} 距离出生点过近(<8格)，可能影响玩家基地展开";
+
             return result;
         }
 
@@ -546,8 +566,9 @@ namespace TSMapEditor.AI
                 _ => 0.25f
             };
 
+            var exclusionZones = GetSpawnExclusionZones();
             var mutation = new AIPlaceTerrainObjectMutation(mutationTarget, treeTypes,
-                pos.X, pos.Y, radius, densityValue, $"放置树木");
+                pos.X, pos.Y, radius, densityValue, $"放置树木", exclusionZones);
             mutationManager.PerformMutation(mutation);
 
             return $"✓ 已在 {GetPositionDescription(args)} 放置{density}密度的树木（{treeTypes.Count}种混搭）";
@@ -905,6 +926,24 @@ namespace TSMapEditor.AI
             sb.AppendLine("用 search_units 搜索你需要的任何特定单位。");
 
             return sb.ToString();
+        }
+
+        // ─── Spatial Helpers ──────────────────────────────────────
+
+        /// <summary>
+        /// Returns exclusion zones around all spawn points (waypoints 0-7).
+        /// Used by tree/decoration placement to automatically avoid spawn areas.
+        /// The 8-cell radius ensures players have room to deploy their base.
+        /// </summary>
+        private List<(Point2D Center, int Radius)> GetSpawnExclusionZones(int radius = 8)
+        {
+            var zones = new List<(Point2D, int)>();
+            foreach (var wp in map.Waypoints)
+            {
+                if (wp.Identifier >= 0 && wp.Identifier <= 7 && wp.Position.X >= 0)
+                    zones.Add((wp.Position, radius));
+            }
+            return zones;
         }
 
         // ─── Description Helpers ────────────────────────────────────
