@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Rampastring.Tools;
+using TSMapEditor.AI.Workflow;
 using TSMapEditor.Models;
 using TSMapEditor.Mutations;
 using TSMapEditor.Rendering;
@@ -12,13 +13,13 @@ namespace TSMapEditor.AI
 {
     /// <summary>
     /// The main AI chat service with Agent Loop architecture.
-    /// 
+    ///
     /// Flow:
     /// 1. User sends message → background thread calls LLM with tool definitions
     /// 2. If LLM returns tool_calls → queue for main thread execution
     /// 3. Main thread executes tools via ProcessPendingOperations()
     /// 4. Results fed back to LLM → loop until LLM returns text
-    /// 
+    ///
     /// Threading model:
     /// - HTTP calls to AI run on a background thread (Task.Run)
     /// - Map mutations MUST run on the main thread (MonoGame game loop)
@@ -42,6 +43,7 @@ namespace TSMapEditor.AI
         private List<ToolCallInfo> pendingToolCalls;           // Background → Main: tools to execute
         private List<(string id, string result)> pendingToolResults; // Main → Background: tool results
         private string pendingFinalMessage;                    // Background → Main: final text response
+        private string pendingFinalReasoning;
         private string pendingError;                           // Background → Main: error message
         private readonly ManualResetEventSlim toolResultsReady = new ManualResetEventSlim(false);
         private CancellationTokenSource currentCts;            // For cancel button support
@@ -84,15 +86,18 @@ namespace TSMapEditor.AI
         /// The currently selected map region.
         /// </summary>
         public AISelection CurrentSelection { get; private set; }
+        public AIWorkflowState WorkflowState { get; } = new AIWorkflowState();
 
         public void SetSelection(int x, int y, int width, int height)
         {
             CurrentSelection = new AISelection(x, y, width, height);
+            WorkflowState.ActiveSelection = $"({x},{y}) {width}x{height}";
         }
 
         public void ClearSelection()
         {
             CurrentSelection = null;
+            WorkflowState.ActiveSelection = string.Empty;
         }
 
         /// <summary>
@@ -124,7 +129,7 @@ namespace TSMapEditor.AI
             this.mutationTarget = mutationTarget;
 
             if (map != null && theaterGraphics != null && mutationManager != null && mutationTarget != null)
-                toolExecutor = new ToolExecutor(map, theaterGraphics, mutationManager, mutationTarget);
+                toolExecutor = new ToolExecutor(map, theaterGraphics, mutationManager, mutationTarget, WorkflowState, () => CurrentSelection);
             else
                 toolExecutor = null;
         }
@@ -183,13 +188,15 @@ namespace TSMapEditor.AI
                 if (pendingFinalMessage != null)
                 {
                     string message = pendingFinalMessage;
+                    string reasoning = pendingFinalReasoning;
                     pendingFinalMessage = null;
+                    pendingFinalReasoning = null;
                     agentState = AgentState.Idle;
 
                     // Run programmatic quality checks before declaring completion
                     RunQualityChecks();
 
-                    chatHistory.Add(ChatMessage.Assistant(message));
+                    chatHistory.Add(ChatMessage.Assistant(message, reasoning));
                     MessageReceived?.Invoke(this, message);
                     IsBusy = false;
                     if (mutationManager != null) mutationManager.IsLocked = false;
@@ -257,6 +264,7 @@ namespace TSMapEditor.AI
             }
 
             lastUserMessage = userMessage;
+            Workflow.AIWorkflowIntentResolver.ApplyInitialState(WorkflowState, userMessage);
             chatHistory.Add(ChatMessage.User(userMessage));
 
             // Trim history to prevent token overflow (sliding window)
@@ -283,6 +291,7 @@ namespace TSMapEditor.AI
                     lock (syncLock)
                     {
                         pendingFinalMessage = msg;
+                        pendingFinalReasoning = null;
                         agentState = AgentState.Idle;
                     }
                 }
@@ -320,7 +329,7 @@ namespace TSMapEditor.AI
                 {
                     // AI wants to call tools
                     // Add assistant message with tool calls to history
-                    chatHistory.Add(ChatMessage.AssistantWithToolCalls(response.ToolCalls));
+                    chatHistory.Add(ChatMessage.AssistantWithToolCalls(response.ToolCalls, response.ReasoningContent));
 
                     // 使用封装好的方法：把表单交给主线程，并等待主线程返回结果
                     List<(string id, string result)> results = ExecuteOnMainThreadAndWait(response.ToolCalls, ct);
@@ -339,13 +348,21 @@ namespace TSMapEditor.AI
                 {
                     // AI returned text — agent loop complete
                     string finalMessage = response.TextContent ?? "操作已完成。";
-                    lock (syncLock) { pendingFinalMessage = finalMessage; }
+                    lock (syncLock)
+                    {
+                        pendingFinalMessage = finalMessage;
+                        pendingFinalReasoning = response.ReasoningContent;
+                    }
                     return;
                 }
             }
 
             // Max iterations reached
-            lock (syncLock) { pendingFinalMessage = $"操作已完成（达到最大迭代次数 {MaxAgentIterations}）。"; }
+            lock (syncLock)
+            {
+                pendingFinalMessage = $"操作已完成（达到最大迭代次数 {MaxAgentIterations}）。";
+                pendingFinalReasoning = null;
+            }
         }
 
         /// <summary>
@@ -385,66 +402,51 @@ namespace TSMapEditor.AI
 
             return $@"你是 SmartAlert 地图编辑器的 AI 助手，帮助用户编辑红色警戒2/尤里的复仇(Mental Omega mod)的地图。
 
-=== 意图判断 ===
-- 你只处理地图编辑相关的请求。
-- 非地图请求（闲聊等），不调用工具，直接回复：我是地图编辑助手，只能帮你编辑地图。试试说""生成一张2人对战地图""或""在地图中间放5棵树""吧！
-- 不确定意图时，先用文字询问确认。
+{BuildWorkflowProtocolPrompt()}
+
+{BuildSelectionGuardrailPrompt()}
 
 当前场景: {theaterName}
 每次工具执行后你会收到执行结果和[当前地图状态]，其中包含建筑、树木、载具、步兵的实时数量。
 如果发现数量异常变化（比如突然减少），说明可能发生了撤销操作，你需要根据当前实际状态调整后续计划。
 
-=== 地图生成工作顺序（重要！）===
-生成完整地图时，必须按以下顺序执行：
-1. 先调用 get_map_info 了解可用素材
-2. 设置出生点 (set_spawn_point) — 这决定了整个地图的空间布局
-3. 铺设地形 (fill_terrain) — 混合多种地面类型，不能单一颜色
-4. 创建高地 (create_plateau) — 远离出生点，增加战术深度
-5. 画河流/道路 (draw_river/draw_road) — 作为天然屏障分隔区域，不能穿过出生点
-6. 放置矿石 (place_ore) — 在出生点外侧 8-15 格
-7. 放置建筑 (place_buildings) — 中立装饰建筑放在公共区域
-8. 放置树木/装饰 (place_trees/place_decorations) — 最后美化
-9. 设置地图名 (set_map_name)
+=== 工具使用规范 ===
+- place_unit / place_units 工具仅用于放置【载具】。
+- place_infantry / place_infantries 工具仅用于放置【步兵/士兵】。
+- 中立建筑（如 CAOILD/CAHOSP 等）通常应将所属方设为 Neutral。
+- 阵营生产建筑（建造厂/兵工厂等）只在用户明确要求预置基地时才放。
+- 防御建筑（炮塔/碉堡）需要指定正确的所属方（如 <Player @ A>）。
+- 中立建筑分散放置在公共区域，不要堆在一起。
 
-=== 地图设计核心原则 ===
+{BuildOwnerGuardrailPrompt()}
 
-**出生点布局（最重要！）**
-- 每个玩家出生点周围必须保持 15+ 格的平坦陆地，供基地展开
-- 出生点 8 格内不能有任何建筑、树木、矿石、装饰物、斜坡、水面
-- 不同玩家出生点之间至少 25% 地图宽度的距离
-- 对称/平衡地图：出生点对角或等距分布
-- 非对称地图(1vN塔防)：防守方放角落/边缘(如 northwest 15%,15%)，进攻方放对侧
+=== 出生点与障碍物规则 ===
+不要将出生点附近的障碍物一律视为错误，需根据【意图】区分处理：
+- BalancedSkirmish: 阻挡基地展开空间的障碍物通常是错误，需保持出生点周围 15+ 格平坦。
+- CreativeSkirmish, SurvivalChallenge, TowerDefense, ScenarioStory: 出生点附近的树木、建筑或障碍物可能是设计刻意为之，但你应在回复中解释这是一种风险或设计选择。
+- BeautifyExistingMap: 除非用户要求，否则避免破坏核心游戏区域（如出生点周围）。
+- LocalEdit: 改动必须在概念上局限于用户选定的区域。
 
-**1vN 塔防图布局原则**
-- 防守方(1方)放在地图的一个角落或边缘，利用角落减少受攻面
-- 进攻方(N方)集中在对侧（如防守方在 NW，进攻方在 E/SE/S）
-- 同队出生点相互靠近（间距 10-15%），敌对阵营间距 40%+
-- 防守方附属的中立建筑放在其出生点外围 12-20 格，不堆在出生点上
-- 可用河流/高地在防守方和进攻方之间创建天然屏障
+=== 地图生成基本参考 ===
+（如果你确定意图需要从零生成平衡地图，请参考以下顺序，否则按需执行）
+1. 设置出生点 (set_spawn_point) — 决定空间布局。不同玩家出生点之间至少 25% 地图宽度的距离。
+2. 铺设地形 (fill_terrain) — 混合多种地面类型，使交错自然。
+3. 创建高地 (create_plateau)
+4. 画河流/道路 (draw_river/draw_road)
+5. 放置矿石 (place_ore)
+6. 放置建筑 (place_buildings)
+7. 放置树木/装饰 (place_trees/place_decorations)
+8. 设置地图名 (set_map_name)
 
-**地形美化（来源：RA2地图教程）**
-- 地面不能只有一种颜色！必须混合 3+ 种地面类型
-- 用 Shift 连续绘制使不同地面类型交错零碎，不要大片方块
-- 悬崖/丘陵旁边用碎石草地(rough_grass) + 暗色草地(dark_grass)过渡
-- 树下铺暗色草地。树木不要太分散也不要太密集
-- 水岸边用沙地(sand)过渡，不能方方正正
-- 地形变化要自然渐变，不能有尖锐的地面颜色分界
+1vN 塔防图参考：
+- 防守方(1方)放角落/边缘，利用角落减少受攻面。进攻方(N方)集中在对侧。
 
-**水体/河流规划**
-- 河流作为天然屏障，应在不同阵营之间（不是穿过出生点）
-- 绝对不能让河流穿过任何出生点附近（系统会自动拦截）
-- 河流两端应有通路(桥梁或浅滩)
+地形美化参考：
+- 必须混合 3+ 种地面类型。水岸边用沙地(sand)过渡。悬崖旁用碎石草地(rough_grass)过渡。
 
-**建筑分类（重要！）**
-- 地图装饰用中立建筑(CA前缀，如 CAOILD/CAHOSP/CAHSE01)，所属方设为 Neutral
-- 阵营生产建筑（建造厂/兵工厂/矿厂等）只在用户明确要求""预置基地""时才放
-- 用户要""中立单位和建筑""时，使用CA前缀的中立建筑和中立载具（民用车辆等）
-- 防御建筑（炮塔/碉堡）需要指定正确的所属方(如 <Player @ A>)
-- 中立建筑分散放置在公共区域，不要堆在一起
-
-**效率**
+效率建议：
 - 使用 place_buildings（批量）代替多次 place_building（单个）
-- 使用 place_units（批量）代替多次 place_unit（单个）
+- 使用 place_units / place_infantries 批量工具代替单个放置。
 - 下方代码表中的代码可以直接使用，不在表中的用 search_units 搜索
 
 {codebook}
@@ -462,7 +464,61 @@ namespace TSMapEditor.AI
 - 推荐使用 x_pct/y_pct 百分比指定位置(0=最左/最上, 100=最右/最下)
 - 也可使用方位词: center, north, south, east, west, northwest, northeast, southwest, southeast
 
-完成后用简短中文告诉用户你做了什么。非地图操作请直接拒绝。";
+完成后用简短中文向用户总结你做了什么。请勿在回复中声称进行了活体验证或测试，除非你确实调用了相关的校验工具。非地图操作请直接拒绝。";
+        }
+
+        private static string BuildWorkflowProtocolPrompt()
+        {
+            return @"=== 意图判断与工作流协议 ===
+在进行大量的地图生成或多步编辑前，必须先推断用户的意图（Intent）。
+支持的意图包括：
+- BalancedSkirmish (平衡对战)
+- CreativeSkirmish (创意对战)
+- SurvivalChallenge (生存挑战)
+- TowerDefense (塔防)
+- ScenarioStory (剧情战役)
+- BeautifyExistingMap (现有地图美化)
+- LocalEdit (局部编辑)
+
+如果用户意图不明确且后续操作依赖于意图，请主动提问确认，不要自行猜测。
+在进行任何建设前，始终调用 `get_map_info` 来检查当前地图资源。
+
+--- 工作流状态管理协议 ---
+你拥有两个工作流工具：`set_workflow_state`（写入）和 `get_workflow_state`（读取）。
+
+**`set_workflow_state` 使用规则：**
+- `set_workflow_state` 是唯一用于更新工作流状态的工具，不会修改地图数据。
+- 在开始**多步骤**地图生成或编辑任务时，应在前期调用 `set_workflow_state` 设置：user_goal、intent、current_phase、pending_steps，以及可选的 known_risks。
+- 在执行过程中，当发生**有意义的阶段转换**时更新 `set_workflow_state`（例如从 Terrain 阶段进入 Structures 阶段），而不是每次调用小工具前都更新。
+- 不要在每一个工具调用前/后都调用 `set_workflow_state`——这会浪费 Token 且无意义。
+
+**`get_workflow_state` 使用规则：**
+- 在恢复中断的任务、连续调用多次工具后进度不明确时，或需要回顾当前任务上下文时，调用 `get_workflow_state`。
+- `get_workflow_state` 中的 [Last Validation Findings] 仅代表上一次质量检查的结果，作为风险提示。这些问题在检查后可能已经被自动修复，请勿盲目反复尝试修复它们；你可以利用这些信息向用户解释风险或决定后续检查策略。
+
+**严格禁止：**
+- 不要发明或调用工具 schema 中不存在的工作流工具。只使用 `set_workflow_state` 和 `get_workflow_state`。
+- 不要在回复中声称进行了验证、测试或质量检查，除非你确实调用了相应的校验工具并获得了结果。";
+        }
+
+        private static string BuildSelectionGuardrailPrompt()
+        {
+            return @"=== 选区与作用域规范 ===
+- 当存在活跃选区（Active Selection）时，常规局部编辑工具接收到的坐标和百分比将自动作为【选区相对坐标】来解析。你无需手动换算。
+- 当不存在活跃选区时，上述工具的坐标将回退为全地图相对或绝对坐标。
+- 针对选区内的编辑需求，优先使用常规编辑工具（如 place_trees/place_ore/clear_area 等），这些工具会自动在选区内工作并避免溢出，无需你自己去计算和模拟选区边界。
+- draw_road 和 draw_river 的起点与终点在有选区时同样是相对于选区的，但请注意，渲染出的路径宽度可能会轻微溢出选区边界，这是已知的限制。如果对边缘精度要求极高，请避免在选区边缘画宽路或向用户解释此限制。
+- 绝对全局工具：set_spawn_point 和 set_map_name 永远作用于全图，不受选区约束。
+- 非修改类工具：get_map_info, get_workflow_state, set_workflow_state, get_houses 等属于查询和控制工具，不会修改任何地形或选区内容。
+- 严禁行为：不得在未实际调用任何校验工具的情况下，虚构并声称选区编辑已通过质量检查。";
+        }
+
+        private static string BuildOwnerGuardrailPrompt()
+        {
+            return @"=== 所属方(Owner/Faction)规则 ===
+- 如果不确定可用的所属方名称，先调用 `get_houses` 获取精确列表。
+- owner 参数必须使用 `get_houses` 返回的精确 ININame，不要自行编造阵营名或使用缩写。
+- 如果用户指定的所属方在 `get_houses` 结果中不存在，请告知用户并让用户从真实列表中选择。";
         }
 
         private string GetTheaterGuide(string theaterName)
@@ -533,7 +589,22 @@ namespace TSMapEditor.AI
                 if (fixes.Count == 0)
                 {
                     Logger.Log("MapQualityChecker: All checks passed.");
+                    if (WorkflowState != null)
+                        WorkflowState.ValidationIssues.Clear();
                     return;
+                }
+
+                if (WorkflowState != null)
+                {
+                    // These are findings from the last quality check pass.
+                    var policy = TSMapEditor.AI.Validation.MapValidationPolicyResolver.Resolve(
+                        WorkflowState.Intent, WorkflowState.UserGoal ?? lastUserMessage);
+                    var issues = TSMapEditor.AI.Validation.MapQualityIssueConverter.FromQualityFixes(fixes, policy);
+                    WorkflowState.ValidationIssues.Clear();
+                    foreach (var issue in issues)
+                    {
+                        WorkflowState.ValidationIssues.Add(issue.ToSummary());
+                    }
                 }
 
                 ToolProgressUpdate?.Invoke(this, $"🔍 质量检查发现 {fixes.Count} 个问题，自动修复中...");

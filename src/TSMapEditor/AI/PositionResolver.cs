@@ -146,5 +146,75 @@ namespace TSMapEditor.AI
                    $"等距中心: ({Center},{Center})，" +
                    $"菱形半径: {DiamondRadius}";
         }
+
+        /// <summary>
+        /// Resolves a position relative to an active selection rectangle.
+        /// If selection is null, falls back to full-map Resolve.
+        /// - 0%/0% maps to selection top-left (X, Y).
+        /// - 100%/100% maps to selection bottom-right (X+Width-1, Y+Height-1).
+        /// - Semantic positions are mapped relative to the selection bounds.
+        /// - Final result is clamped to the map diamond.
+        /// </summary>
+        public Point2D ResolveWithinSelection(AISelection selection, string semantic = null, int? xPct = null, int? yPct = null)
+        {
+            if (selection == null)
+                return Resolve(semantic, xPct, yPct);
+
+            // Convert semantic to percentage relative to selection
+            var (resolvedXPct, resolvedYPct) = ResolveToPercentages(semantic, xPct, yPct);
+
+            // Map percentages to selection coordinates
+            int clampedX = Math.Max(0, Math.Min(100, resolvedXPct));
+            int clampedY = Math.Max(0, Math.Min(100, resolvedYPct));
+
+            int selRight = selection.X + selection.Width - 1;
+            int selBottom = selection.Y + selection.Height - 1;
+
+            int x, y;
+            if (selection.Width <= 1)
+                x = selection.X;
+            else
+                x = selection.X + (int)Math.Round((double)clampedX / 100.0 * (selection.Width - 1));
+
+            if (selection.Height <= 1)
+                y = selection.Y;
+            else
+                y = selection.Y + (int)Math.Round((double)clampedY / 100.0 * (selection.Height - 1));
+
+            // Clamp to selection bounds
+            x = Math.Max(selection.X, Math.Min(selRight, x));
+            y = Math.Max(selection.Y, Math.Min(selBottom, y));
+
+            return ClampToDiamond(new Point2D(x, y));
+        }
+
+        /// <summary>
+        /// Converts a semantic position name or explicit percentages to (xPct, yPct).
+        /// Used internally by both full-map and selection-relative resolution.
+        /// </summary>
+        private (int xPct, int yPct) ResolveToPercentages(string semantic, int? xPct, int? yPct)
+        {
+            if (!string.IsNullOrEmpty(semantic))
+            {
+                return semantic.ToLowerInvariant() switch
+                {
+                    "center" => (50, 50),
+                    "north" or "top" => (50, 10),
+                    "south" or "bottom" => (50, 90),
+                    "east" or "right" => (90, 50),
+                    "west" or "left" => (10, 50),
+                    "northwest" or "top_left" => (15, 15),
+                    "northeast" or "top_right" => (85, 15),
+                    "southwest" or "bottom_left" => (15, 85),
+                    "southeast" or "bottom_right" => (85, 85),
+                    _ => (50, 50),
+                };
+            }
+
+            if (xPct.HasValue && yPct.HasValue)
+                return (xPct.Value, yPct.Value);
+
+            return (50, 50); // Default to center
+        }
     }
 }

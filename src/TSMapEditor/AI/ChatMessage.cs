@@ -34,15 +34,28 @@ namespace TSMapEditor.AI
         /// </summary>
         public string ToolCallId { get; set; }
 
+        /// <summary>
+        /// Reasoning/thinking content returned by reasoning-enabled models.
+        /// </summary>
+        public string ReasoningContent { get; set; }
+
         public static ChatMessage User(string content) => new ChatMessage("user", content);
-        public static ChatMessage Assistant(string content) => new ChatMessage("assistant", content);
+
+        public static ChatMessage Assistant(string content, string reasoningContent = null)
+        {
+            return new ChatMessage("assistant", content) { ReasoningContent = reasoningContent };
+        }
 
         /// <summary>
         /// Creates an assistant message that contains tool calls (no text content).
         /// </summary>
-        public static ChatMessage AssistantWithToolCalls(List<ToolCallInfo> toolCalls)
+        public static ChatMessage AssistantWithToolCalls(List<ToolCallInfo> toolCalls, string reasoningContent = null)
         {
-            return new ChatMessage("assistant", null) { ToolCalls = toolCalls };
+            return new ChatMessage("assistant", null)
+            {
+                ToolCalls = toolCalls,
+                ReasoningContent = reasoningContent
+            };
         }
 
         /// <summary>
@@ -70,6 +83,7 @@ namespace TSMapEditor.AI
     public class ChatResponse
     {
         public string TextContent { get; set; }
+        public string ReasoningContent { get; set; }
         public List<ToolCallInfo> ToolCalls { get; set; }
         public bool HasToolCalls => ToolCalls != null && ToolCalls.Count > 0;
     }

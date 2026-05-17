@@ -11,6 +11,7 @@ using TSMapEditor.Mutations;
 using TSMapEditor.Mutations.Classes;
 using TSMapEditor.Rendering;
 using TSMapEditor.UI;
+using TSMapEditor.AI.Workflow;
 
 namespace TSMapEditor.AI
 {
@@ -19,6 +20,17 @@ namespace TSMapEditor.AI
     /// Each tool call is mapped to a map mutation via PositionResolver.
     /// The AI never sees raw coordinates — it only knows semantic positions and percentages.
     /// </summary>
+    /// <summary>
+    /// Controls whether position resolution uses the active selection or the full map.
+    /// </summary>
+    internal enum PositionScope
+    {
+        /// <summary>Always resolve against the full map diamond.</summary>
+        Global,
+        /// <summary>Resolve relative to active selection when one exists; fall back to full map otherwise.</summary>
+        SelectionWhenActive
+    }
+
     public class ToolExecutor
     {
         private readonly Map map;
@@ -26,19 +38,28 @@ namespace TSMapEditor.AI
         private readonly MutationManager mutationManager;
         private readonly IMutationTarget mutationTarget;
         private readonly PositionResolver positionResolver;
+        private readonly AIWorkflowState workflowState;
+        private readonly Func<AISelection> selectionProvider;
 
         // Unit reference: code -> description, loaded from References/unit_reference.json
         private readonly Dictionary<string, string> unitReference = new(StringComparer.OrdinalIgnoreCase);
 
+        // Chinese unit aliases loaded from References/unit_aliases.zh.json
+        private IReadOnlyList<AIUnitAliasMatch> unitAliases = System.Array.Empty<AIUnitAliasMatch>();
+
         public ToolExecutor(Map map, TheaterGraphics theaterGraphics,
-            MutationManager mutationManager, IMutationTarget mutationTarget)
+            MutationManager mutationManager, IMutationTarget mutationTarget,
+            AIWorkflowState workflowState = null, Func<AISelection> selectionProvider = null)
         {
             this.map = map ?? throw new ArgumentNullException(nameof(map));
             this.theaterGraphics = theaterGraphics ?? throw new ArgumentNullException(nameof(theaterGraphics));
             this.mutationManager = mutationManager ?? throw new ArgumentNullException(nameof(mutationManager));
             this.mutationTarget = mutationTarget ?? throw new ArgumentNullException(nameof(mutationTarget));
+            this.workflowState = workflowState;
+            this.selectionProvider = selectionProvider;
             this.positionResolver = new PositionResolver(map);
             LoadUnitReference();
+            LoadUnitAliases();
         }
 
         /// <summary>
@@ -55,6 +76,9 @@ namespace TSMapEditor.AI
                 string result = toolName switch
                 {
                     "get_map_info" => ExecuteGetMapInfo(),
+                    "get_workflow_state" => ExecuteGetWorkflowState(),
+                    "set_workflow_state" => ExecuteSetWorkflowState(args),
+                    "get_houses" => ExecuteGetHouses(),
                     "fill_terrain" => ExecuteFillTerrain(args),
                     "create_plateau" => ExecuteCreatePlateau(args),
                     "draw_road" => ExecuteDrawRoad(args),
@@ -63,6 +87,8 @@ namespace TSMapEditor.AI
                     "place_buildings" => ExecutePlaceBatch(args, AIPlaceObjectType.Building),
                     "place_unit" => ExecutePlaceUnit(args),
                     "place_units" => ExecutePlaceBatch(args, AIPlaceObjectType.Vehicle),
+                    "place_infantry" => ExecutePlaceInfantry(args),
+                    "place_infantries" => ExecutePlaceBatch(args, AIPlaceObjectType.Infantry),
                     "set_spawn_point" => ExecuteSetSpawnPoint(args),
                     "place_ore" => ExecutePlaceOre(args),
                     "place_trees" => ExecutePlaceTrees(args),
@@ -77,7 +103,7 @@ namespace TSMapEditor.AI
                 // Append map state summary to all mutation results so the AI
                 // always sees the current global state after each operation.
                 // Skip for query-only tools and errors.
-                bool isQueryOnly = toolName == "get_map_info" || toolName == "search_units";
+                bool isQueryOnly = toolName == "get_map_info" || toolName == "search_units" || toolName == "get_workflow_state" || toolName == "set_workflow_state" || toolName == "get_houses";
                 if (!isQueryOnly && !result.StartsWith("❌"))
                 {
                     result += "\n" + GetMapStateSummary();
@@ -99,23 +125,202 @@ namespace TSMapEditor.AI
 
         // ─── Position Helpers ───────────────────────────────────────
 
-        private Point2D ResolvePosition(JsonElement args)
+        /// <summary>
+        /// Resolves position with selection-awareness when a selection is active.
+        /// Local tools use SelectionWhenActive; global tools use Global.
+        /// </summary>
+        private Point2D ResolvePosition(JsonElement args, PositionScope scope = PositionScope.Global)
         {
             string semantic = args.TryGetString("position");
             int? xPct = args.TryGetInt("x_pct");
             int? yPct = args.TryGetInt("y_pct");
+
+            if (scope == PositionScope.SelectionWhenActive)
+            {
+                var selection = selectionProvider?.Invoke();
+                if (selection != null)
+                    return positionResolver.ResolveWithinSelection(selection, semantic, xPct, yPct);
+            }
+
             return positionResolver.Resolve(semantic, xPct, yPct);
         }
 
-        private Point2D ResolveEndpoint(JsonElement args, string posKey, string xKey, string yKey)
+        /// <summary>
+        /// Resolves a percentage position with selection-awareness.
+        /// Used by batch placement and other tools that pass coordinates directly.
+        /// </summary>
+        private Point2D ResolvePercentagePosition(int xPct, int yPct, PositionScope scope = PositionScope.Global)
+        {
+            if (scope == PositionScope.SelectionWhenActive)
+            {
+                var selection = selectionProvider?.Invoke();
+                if (selection != null)
+                    return positionResolver.ResolveWithinSelection(selection, null, xPct, yPct);
+            }
+
+            return positionResolver.Resolve(null, xPct, yPct);
+        }
+
+        private AISelection GetActiveSelection(PositionScope scope)
+        {
+            if (scope != PositionScope.SelectionWhenActive)
+                return null;
+
+            return selectionProvider?.Invoke();
+        }
+
+        private static bool IsWithinSelection(Point2D point, AISelection selection)
+        {
+            if (selection == null)
+                return true;
+
+            return point.X >= selection.X
+                && point.Y >= selection.Y
+                && point.X < selection.X + selection.Width
+                && point.Y < selection.Y + selection.Height;
+        }
+
+        /// <summary>
+        /// Resolves path endpoints with optional selection-awareness.
+        /// draw_road/draw_river now resolve selection-relative when a selection is active.
+        /// </summary>
+        private Point2D ResolveEndpoint(JsonElement args, string posKey, string xKey, string yKey,
+            PositionScope scope = PositionScope.SelectionWhenActive)
         {
             string semantic = args.TryGetString(posKey);
             int? xPct = args.TryGetInt(xKey);
             int? yPct = args.TryGetInt(yKey);
+
+            if (scope == PositionScope.SelectionWhenActive)
+            {
+                var selection = selectionProvider?.Invoke();
+                if (selection != null)
+                    return positionResolver.ResolveWithinSelection(selection, semantic, xPct, yPct);
+            }
+
             return positionResolver.Resolve(semantic, xPct, yPct);
         }
 
+        // ─── Selection Containment Helpers ──────────────────────────
+
+        /// <summary>
+        /// Clamps a radius so the circular area around center stays within the active selection.
+        /// Returns true if the operation can proceed with the (possibly reduced) radius.
+        /// Returns false if the selection is too small for even radius=1.
+        /// If no selection is active, returns the requested radius unchanged.
+        /// </summary>
+        internal static bool TryClampRadiusToSelection(Point2D center, int requestedRadius, AISelection selection,
+            out int clampedRadius, out string warning)
+        {
+            warning = null;
+
+            if (selection == null)
+            {
+                clampedRadius = requestedRadius;
+                return true;
+            }
+
+            int distLeft = center.X - selection.X;
+            int distRight = (selection.X + selection.Width - 1) - center.X;
+            int distTop = center.Y - selection.Y;
+            int distBottom = (selection.Y + selection.Height - 1) - center.Y;
+
+            int maxRadius = Math.Min(Math.Min(distLeft, distRight), Math.Min(distTop, distBottom));
+            maxRadius = Math.Max(0, maxRadius);
+
+            if (maxRadius < 1)
+            {
+                clampedRadius = 0;
+                warning = "选区太小，无法容纳最小半径操作";
+                return false;
+            }
+
+            clampedRadius = Math.Min(requestedRadius, maxRadius);
+            if (clampedRadius < requestedRadius)
+                warning = $"半径从{requestedRadius}缩小到{clampedRadius}以适应选区";
+
+            return true;
+        }
+
+        /// <summary>
+        /// Clamps a rectangle (startX, startY, width, height) to fit within the active selection.
+        /// Returns false if the intersection is empty.
+        /// If no selection is active, returns the original rectangle unchanged.
+        /// </summary>
+        internal static bool TryClampRectToSelection(int startX, int startY, int width, int height,
+            AISelection selection, out int clampedX, out int clampedY, out int clampedW, out int clampedH,
+            out string warning)
+        {
+            warning = null;
+
+            if (selection == null)
+            {
+                clampedX = startX;
+                clampedY = startY;
+                clampedW = width;
+                clampedH = height;
+                return true;
+            }
+
+            int selRight = selection.X + selection.Width;
+            int selBottom = selection.Y + selection.Height;
+            int rectRight = startX + width;
+            int rectBottom = startY + height;
+
+            clampedX = Math.Max(startX, selection.X);
+            clampedY = Math.Max(startY, selection.Y);
+            int endX = Math.Min(rectRight, selRight);
+            int endY = Math.Min(rectBottom, selBottom);
+
+            clampedW = endX - clampedX;
+            clampedH = endY - clampedY;
+
+            if (clampedW <= 0 || clampedH <= 0)
+            {
+                clampedW = 0;
+                clampedH = 0;
+                warning = "请求的区域完全在选区范围外";
+                return false;
+            }
+
+            if (clampedW < width || clampedH < height)
+                warning = $"区域从 {width}x{height} 裁剪为 {clampedW}x{clampedH} 以适应选区";
+
+            return true;
+        }
+
         // ─── Tool Implementations ───────────────────────────────────
+
+        private string ExecuteGetWorkflowState()
+        {
+            if (workflowState == null)
+            {
+                return "❌ WorkflowState is not available in the current context.";
+            }
+            return workflowState.ToSummary();
+        }
+
+        private string ExecuteSetWorkflowState(JsonElement args)
+        {
+            if (workflowState == null)
+            {
+                return "❌ WorkflowState is not available in the current context.";
+            }
+
+            int updated = Workflow.AIWorkflowStateUpdater.Apply(workflowState, args);
+            if (updated == 0)
+            {
+                return "⚠️ No fields were updated. Provide at least one of: user_goal, intent, current_phase, completed_steps, pending_steps, known_risks.";
+            }
+
+            return $"✅ 已更新工作流状态（{updated}个字段）\n" + workflowState.ToSummary();
+        }
+
+        private string ExecuteGetHouses()
+        {
+            var houses = map.GetHouses();
+            return AIHouseSummaryFormatter.Format(houses);
+        }
 
         private string ExecuteGetMapInfo()
         {
@@ -205,16 +410,28 @@ namespace TSMapEditor.AI
 
             if (scope == "full_map")
             {
-                // Fill the entire map area
-                startX = 1;
-                startY = 1;
-                int maxCoord = map.Size.X + map.Size.Y - 1;
-                width = maxCoord;
-                height = maxCoord;
+                // When selection is active, "full_map" fills the selected rectangle
+                var selection = selectionProvider?.Invoke();
+                if (selection != null)
+                {
+                    startX = selection.X;
+                    startY = selection.Y;
+                    width = selection.Width;
+                    height = selection.Height;
+                }
+                else
+                {
+                    // Fill the entire map area
+                    startX = 1;
+                    startY = 1;
+                    int maxCoord = map.Size.X + map.Size.Y - 1;
+                    width = maxCoord;
+                    height = maxCoord;
+                }
             }
             else
             {
-                var pos = ResolvePosition(args);
+                var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
                 int patchRadius = scope switch
                 {
                     "small_patch" => 5,
@@ -242,7 +459,7 @@ namespace TSMapEditor.AI
 
         private string ExecuteCreatePlateau(JsonElement args)
         {
-            var pos = ResolvePosition(args);
+            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
             string size = args.GetProperty("size").GetString();
             int height = args.TryGetInt("height") ?? 2;
 
@@ -255,6 +472,14 @@ namespace TSMapEditor.AI
             };
 
             height = Math.Max(1, Math.Min(4, height));
+
+            // Clamp radius to fit within active selection
+            var activeSelection = selectionProvider?.Invoke();
+            if (!TryClampRadiusToSelection(pos, radius, activeSelection, out int clampedRadius, out string clampWarning))
+                return $"⏭ {clampWarning}";
+            if (clampWarning != null)
+                Logger.Log($"ToolExecutor create_plateau: {clampWarning}");
+            radius = clampedRadius;
 
             Logger.Log($"ToolExecutor create_plateau: pos=({pos.X},{pos.Y}) radius={radius} height={height}");
 
@@ -367,9 +592,26 @@ namespace TSMapEditor.AI
             return ExecutePlaceObject(args, AIPlaceObjectType.Vehicle);
         }
 
+        private string ExecutePlaceInfantry(JsonElement args)
+        {
+            return ExecutePlaceObject(args, AIPlaceObjectType.Infantry);
+        }
+
+        private static string GetObjectTypeDisplayName(AIPlaceObjectType objectType)
+        {
+            return objectType switch
+            {
+                AIPlaceObjectType.Building => "建筑",
+                AIPlaceObjectType.Vehicle => "载具",
+                AIPlaceObjectType.Infantry => "步兵",
+                _ => "对象"
+            };
+        }
+
         private string ExecutePlaceObject(JsonElement args, AIPlaceObjectType objectType)
         {
-            var pos = ResolvePosition(args);
+            AISelection activeSelection = GetActiveSelection(PositionScope.SelectionWhenActive);
+            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
             string name = args.GetProperty("name").GetString();
             string ownerName = args.TryGetString("owner") ?? "Neutral";
 
@@ -378,7 +620,7 @@ namespace TSMapEditor.AI
             if (resolvedName == null)
             {
                 var suggestions = FindSimilarNames(name, objectType, 5);
-                string typeName = objectType == AIPlaceObjectType.Building ? "建筑" : "载具";
+                string typeName = GetObjectTypeDisplayName(objectType);
                 if (suggestions.Count > 0)
                     return $"❌ 找不到{typeName}: \"{name}\"。你是否要找: {string.Join(", ", suggestions)}";
                 return $"❌ 找不到{typeName}: \"{name}\"";
@@ -386,7 +628,7 @@ namespace TSMapEditor.AI
 
             House owner = ResolveOwner(ownerName);
             if (owner == null)
-                return $"❌ 找不到所属方: \"{ownerName}\"";
+                return $"❌ 找不到所属方: \"{ownerName}\"。可用所属方: {AIHouseResolver.FormatAvailableOwners(map.GetHouses())}";
 
             var positions = new List<Point2D> { pos };
             if (map.GetTile(pos) == null)
@@ -445,6 +687,9 @@ namespace TSMapEditor.AI
                 relocateNote += "（已避开水面/斜坡）";
             }
 
+            if (!IsWithinSelection(positions[0], activeSelection))
+                return $"⚠️ 跳过 {resolvedName}：未找到选区 {activeSelection} 内的有效放置位置。";
+
             var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
                 resolvedName, owner, positions, $"放置 {resolvedName}");
             mutationManager.PerformMutation(mutation);
@@ -466,6 +711,7 @@ namespace TSMapEditor.AI
             var errors = new List<string>();
             var spawnWarnings = new List<string>();
             var spawnZones = GetSpawnExclusionZones();
+            AISelection activeSelection = GetActiveSelection(PositionScope.SelectionWhenActive);
 
             foreach (var item in itemsArray.EnumerateArray())
             {
@@ -476,7 +722,7 @@ namespace TSMapEditor.AI
                     int yPct = item.TryGetProperty("y_pct", out var yp) ? ParseJsonInt(yp, 50) : 50;
                     string ownerName = item.TryGetProperty("owner", out var ow) ? ow.GetString() ?? "Neutral" : "Neutral";
 
-                    var pos = positionResolver.Resolve(null, xPct, yPct);
+                    var pos = ResolvePercentagePosition(xPct, yPct, PositionScope.SelectionWhenActive);
 
                     string resolvedName = ResolveObjectININame(name, objectType);
                     if (resolvedName == null)
@@ -489,7 +735,7 @@ namespace TSMapEditor.AI
                     House owner = ResolveOwner(ownerName);
                     if (owner == null)
                     {
-                        errors.Add($"{name}(所属方'{ownerName}'无效)");
+                        errors.Add($"{name}(所属方'{ownerName}'无效，可用: {AIHouseResolver.FormatAvailableOwners(map.GetHouses())})");
                         failCount++;
                         continue;
                     }
@@ -552,6 +798,13 @@ namespace TSMapEditor.AI
                         spawnWarnings.Add($"{resolvedName}→已避开水面/斜坡");
                     }
 
+                    if (!IsWithinSelection(pos, activeSelection))
+                    {
+                        errors.Add($"{resolvedName}(未找到选区 {activeSelection} 内的有效位置)");
+                        failCount++;
+                        continue;
+                    }
+
                     var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
                         resolvedName, owner, positions, $"批量放置 {resolvedName}");
                     mutationManager.PerformMutation(mutation);
@@ -578,7 +831,7 @@ namespace TSMapEditor.AI
 
         private string ExecuteSetSpawnPoint(JsonElement args)
         {
-            var pos = ResolvePosition(args);
+            var pos = ResolvePosition(args, PositionScope.Global);
             int playerIndex = args.GetProperty("player_index").GetInt32();
             playerIndex = Math.Max(0, Math.Min(7, playerIndex));
 
@@ -630,7 +883,7 @@ namespace TSMapEditor.AI
 
         private string ExecutePlaceOre(JsonElement args)
         {
-            var pos = ResolvePosition(args);
+            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
             string amount = args.GetProperty("amount").GetString();
             string type = args.TryGetString("type") ?? "ore";
 
@@ -656,10 +909,16 @@ namespace TSMapEditor.AI
                 "large" => 10,
                 _ => 7
             };
+            // Clamp radius to fit within active selection
+            var activeSelection = selectionProvider?.Invoke();
+            if (!TryClampRadiusToSelection(pos, radius, activeSelection, out int clampedRadius, out string clampWarning))
+                return $"⏭ {clampWarning}";
+            if (clampWarning != null)
+                Logger.Log($"ToolExecutor place_ore: {clampWarning}");
+            radius = clampedRadius;
 
             var mutation = new AIPlaceOverlayMutation(mutationTarget, overlayType,
-                pos.X - radius, pos.Y - radius, radius * 2, radius * 2,
-                $"放置{type}矿");
+                pos.X, pos.Y, radius, 0.7f, $"放置{type}矿");
             mutationManager.PerformMutation(mutation);
 
             // Auto-place an Ore Mine drill (TIBTRE01) at the center of the ore field
@@ -688,7 +947,7 @@ namespace TSMapEditor.AI
 
         private string ExecutePlaceTrees(JsonElement args)
         {
-            var pos = ResolvePosition(args);
+            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
             string density = args.TryGetString("density") ?? "medium";
 
             // Get curated tree types for current theater (visually coherent, 3-5 types)
@@ -704,6 +963,12 @@ namespace TSMapEditor.AI
                 "dense" => 0.45f,
                 _ => 0.25f
             };
+
+            // Clamp radius to fit within active selection
+            var activeSelection = selectionProvider?.Invoke();
+            if (!TryClampRadiusToSelection(pos, radius, activeSelection, out int clampedRadius, out string clampWarning))
+                return $"⏭ {clampWarning}";
+            radius = clampedRadius;
 
             var exclusionZones = GetSpawnExclusionZones();
             var mutation = new AIPlaceTerrainObjectMutation(mutationTarget, treeTypes,
@@ -763,21 +1028,33 @@ namespace TSMapEditor.AI
 
         private string ExecuteClearArea(JsonElement args)
         {
-            var pos = ResolvePosition(args);
+            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
             int radius = args.GetProperty("radius").GetInt32();
             radius = Math.Max(3, Math.Min(30, radius));
+            // Clamp clear rectangle to selection bounds
+            int clearStartX = pos.X - radius;
+            int clearStartY = pos.Y - radius;
+            int clearW = radius * 2;
+            int clearH = radius * 2;
+
+            var activeSelection = selectionProvider?.Invoke();
+            if (!TryClampRectToSelection(clearStartX, clearStartY, clearW, clearH, activeSelection,
+                out int cx, out int cy, out int cw, out int ch, out string clampWarning))
+                return $"⏭ {clampWarning}";
 
             var mutation = new AIClearAreaMutation(mutationTarget,
-                pos.X - radius, pos.Y - radius, radius * 2, radius * 2,
-                $"清除区域");
+                cx, cy, cw, ch, $"清除区域");
             mutationManager.PerformMutation(mutation);
 
-            return $"✓ 已清除 {GetPositionDescription(args)} 半径{radius}的区域";
+            string result = $"✓ 已清除 {GetPositionDescription(args)} 半径{radius}的区域";
+            if (clampWarning != null)
+                result += $"\n  ⚠️ {clampWarning}";
+            return result;
         }
 
         private string ExecutePlaceDecorations(JsonElement args)
         {
-            var pos = ResolvePosition(args);
+            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
             string density = args.TryGetString("density") ?? "medium";
             int radius = args.TryGetInt("radius") ?? 8;
             radius = Math.Max(3, Math.Min(20, radius));
@@ -820,6 +1097,11 @@ namespace TSMapEditor.AI
             House neutralOwner = ResolveOwner("Neutral");
             if (neutralOwner == null)
                 return "❌ 找不到 Neutral 所属方";
+            // Clamp radius to fit within active selection
+            var activeSelection = selectionProvider?.Invoke();
+            if (!TryClampRadiusToSelection(pos, radius, activeSelection, out int clampedRadius, out string clampWarning))
+                return $"⏭ {clampWarning}";
+            radius = clampedRadius;
 
             var mutation = new AIPlaceDecorationsMutation(mutationTarget,
                 buildingTypes, neutralOwner, pos.X, pos.Y, radius, densityValue,
@@ -884,6 +1166,10 @@ namespace TSMapEditor.AI
 
             string category = args.TryGetString("category");
 
+            // 1. Check Chinese aliases first (high-confidence matches)
+            var aliasMatches = AIUnitAliasResolver.FindMatches(unitAliases, keyword);
+
+            // 2. Normal reference search
             var results = new List<string>();
             foreach (var kvp in unitReference)
             {
@@ -893,14 +1179,36 @@ namespace TSMapEditor.AI
                     results.Add($"  {kvp.Key} = {kvp.Value}");
             }
 
-            if (results.Count == 0)
+            // 3. Build combined output
+            var output = new List<string>();
+
+            if (aliasMatches.Count > 0)
+            {
+                output.Add("High-confidence aliases:");
+                foreach (var am in aliasMatches)
+                    output.Add($"  {am.Code} = {am.Alias} / {am.Type} / {am.Description}");
+            }
+
+            if (results.Count > 0)
+            {
+                if (output.Count > 0) output.Add("");
+                // Limit to 20 results to avoid overwhelming
+                if (results.Count > 20)
+                {
+                    output.Add($"找到 {results.Count} 个匹配项（显示前20个）:");
+                    output.AddRange(results.Take(20));
+                }
+                else
+                {
+                    output.Add($"找到 {results.Count} 个匹配项:");
+                    output.AddRange(results);
+                }
+            }
+
+            if (output.Count == 0)
                 return $"未找到匹配 \"{keyword}\" 的单位";
 
-            // Limit to 20 results to avoid overwhelming
-            if (results.Count > 20)
-                return $"找到 {results.Count} 个匹配项（显示前20个）:\n{string.Join("\n", results.Take(20))}";
-
-            return $"找到 {results.Count} 个匹配项:\n{string.Join("\n", results)}";
+            return string.Join("\n", output);
         }
 
         /// <summary>
@@ -988,6 +1296,41 @@ namespace TSMapEditor.AI
             catch (Exception ex)
             {
                 Logger.Log($"ToolExecutor: Failed to enrich from game data: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Loads Chinese unit alias codebook from References/unit_aliases.zh.json.
+        /// </summary>
+        private void LoadUnitAliases()
+        {
+            try
+            {
+                string[] searchPaths = new[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AI", "References", "unit_aliases.zh.json"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "AI", "References", "unit_aliases.zh.json"),
+                };
+
+                string aliasPath = null;
+                foreach (var p in searchPaths)
+                {
+                    if (File.Exists(p)) { aliasPath = p; break; }
+                }
+
+                if (aliasPath == null)
+                {
+                    Logger.Log("ToolExecutor: unit_aliases.zh.json not found, Chinese alias resolution will be limited");
+                    return;
+                }
+
+                string json = File.ReadAllText(aliasPath);
+                unitAliases = AIUnitAliasResolver.LoadFromJson(json);
+                Logger.Log($"ToolExecutor: Loaded {unitAliases.Count} Chinese unit aliases");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"ToolExecutor: Failed to load unit aliases: {ex.Message}");
             }
         }
 
@@ -1290,7 +1633,7 @@ namespace TSMapEditor.AI
             int tileIndex = matchedSet.StartTileIndex + actualVariant;
 
             // Get position
-            var pos = ResolvePosition(args);
+            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
 
             // Place the tile using a small 1x1 mutation
             var cell = map.GetTile(pos.X, pos.Y);
@@ -1327,6 +1670,11 @@ namespace TSMapEditor.AI
 
         private string ResolveObjectININame(string name, AIPlaceObjectType objectType)
         {
+            // Try Chinese alias exact resolution first
+            string aliasCode = AIUnitAliasResolver.ResolveExact(unitAliases, name, objectType);
+            if (aliasCode != null)
+                return aliasCode;
+
             List<TechnoType> types = objectType switch
             {
                 AIPlaceObjectType.Building => map.Rules.BuildingTypes.Cast<TechnoType>().ToList(),
@@ -1381,14 +1729,7 @@ namespace TSMapEditor.AI
 
         private House ResolveOwner(string ownerName)
         {
-            var houses = map.GetHouses();
-            if (string.IsNullOrWhiteSpace(ownerName))
-                return houses.Find(h => h.ININame == "Neutral") ?? (houses.Count > 0 ? houses[0] : null);
-
-            return houses.Find(h => h.ININame == ownerName)
-                ?? houses.Find(h => h.ININame.Equals(ownerName, StringComparison.OrdinalIgnoreCase))
-                ?? houses.Find(h => h.ININame.IndexOf(ownerName, StringComparison.OrdinalIgnoreCase) >= 0)
-                ?? (houses.Count > 0 ? houses[0] : null);
+            return AIHouseResolver.ResolveOwner(map.GetHouses(), ownerName);
         }
     }
 

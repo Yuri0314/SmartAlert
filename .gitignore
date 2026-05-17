@@ -363,3 +363,6 @@ AutoSaves/
 # AI API key configuration (future P1)
 smartalert.local.json
 .env
+
+# Local agent collaboration scratch space
+.agent/

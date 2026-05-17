@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Rampastring.Tools;
+using TSMapEditor.AI.Validation;
 using TSMapEditor.GameMath;
 using TSMapEditor.Models;
 using TSMapEditor.Rendering;
@@ -50,6 +51,17 @@ namespace TSMapEditor.AI
 
             Logger.Log($"MapQualityChecker: {fixes.Count} issue(s) found");
             return fixes;
+        }
+
+        /// <summary>
+        /// Returns semantic validation issues for the current map state.
+        /// Delegates to Check() and converts results to MapValidationIssue.
+        /// Does not mutate the map or execute tools.
+        /// </summary>
+        public List<MapValidationIssue> CheckIssues(int expectedPlayers, MapValidationPolicy policy = MapValidationPolicy.Balanced)
+        {
+            var fixes = Check(expectedPlayers);
+            return MapQualityIssueConverter.FromQualityFixes(fixes, policy);
         }
 
         /// <summary>

@@ -487,6 +487,9 @@
     <None Update="AI\References\unit_reference.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="AI\References\unit_aliases.zh.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="ImeSharp" Version="1.4.1" />

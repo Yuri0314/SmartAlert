@@ -49,38 +49,7 @@ namespace TSMapEditor.AI
             if (!endpoint.EndsWith("/chat/completions"))
                 endpoint += "/chat/completions";
 
-            // Build messages array
-            var messages = new List<object>();
-            messages.Add(new { role = "system", content = systemPrompt });
-
-            foreach (var msg in history)
-            {
-                if (msg.Role == "tool")
-                {
-                    // Tool result message
-                    messages.Add(new { role = "tool", content = msg.Content, tool_call_id = msg.ToolCallId });
-                }
-                else if (msg.Role == "assistant" && msg.ToolCalls != null && msg.ToolCalls.Count > 0)
-                {
-                    // Assistant message with tool calls
-                    var toolCalls = new List<object>();
-                    foreach (var tc in msg.ToolCalls)
-                    {
-                        toolCalls.Add(new
-                        {
-                            id = tc.Id,
-                            type = "function",
-                            function = new { name = tc.FunctionName, arguments = tc.Arguments }
-                        });
-                    }
-                    messages.Add(new { role = "assistant", content = msg.Content, tool_calls = toolCalls });
-                }
-                else
-                {
-                    // Regular user/assistant message
-                    messages.Add(new { role = msg.Role, content = msg.Content });
-                }
-            }
+            var messages = BuildMessagePayloads(systemPrompt, history);
 
             // Build request body
             var requestObj = new Dictionary<string, object>
@@ -175,6 +144,57 @@ namespace TSMapEditor.AI
             return ParseResponse(responseBody);
         }
 
+        internal static List<Dictionary<string, object>> BuildMessagePayloads(string systemPrompt, List<ChatMessage> history)
+        {
+            var messages = new List<Dictionary<string, object>>();
+            messages.Add(new Dictionary<string, object> { { "role", "system" }, { "content", systemPrompt } });
+
+            foreach (var msg in history)
+            {
+                var payload = new Dictionary<string, object>();
+                payload["role"] = msg.Role;
+
+                if (msg.Role == "tool")
+                {
+                    payload["content"] = msg.Content;
+                    payload["tool_call_id"] = msg.ToolCallId;
+                }
+                else if (msg.Role == "assistant")
+                {
+                    payload["content"] = msg.Content;
+
+                    if (!string.IsNullOrEmpty(msg.ReasoningContent))
+                    {
+                        payload["reasoning_content"] = msg.ReasoningContent;
+                    }
+
+                    if (msg.ToolCalls != null && msg.ToolCalls.Count > 0)
+                    {
+                        var toolCalls = new List<object>();
+                        foreach (var tc in msg.ToolCalls)
+                        {
+                            toolCalls.Add(new
+                            {
+                                id = tc.Id,
+                                type = "function",
+                                function = new { name = tc.FunctionName, arguments = tc.Arguments }
+                            });
+                        }
+                        payload["tool_calls"] = toolCalls;
+                    }
+                }
+                else
+                {
+                    // user or generic role
+                    payload["content"] = msg.Content;
+                }
+
+                messages.Add(payload);
+            }
+
+            return messages;
+        }
+
         private ChatResponse ParseResponse(string responseBody)
         {
             try
@@ -210,6 +230,13 @@ namespace TSMapEditor.AI
                     contentElement.ValueKind == JsonValueKind.String)
                 {
                     result.TextContent = contentElement.GetString();
+                }
+
+                // Get reasoning content (from thinking models)
+                if (message.TryGetProperty("reasoning_content", out var reasoningElement) &&
+                    reasoningElement.ValueKind == JsonValueKind.String)
+                {
+                    result.ReasoningContent = reasoningElement.GetString();
                 }
 
                 if (!result.HasToolCalls && string.IsNullOrEmpty(result.TextContent))

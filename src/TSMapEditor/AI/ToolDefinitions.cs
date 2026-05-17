@@ -17,6 +17,9 @@ namespace TSMapEditor.AI
         public static List<ToolDefinition> GetAllTools() => new List<ToolDefinition>
         {
             GetMapInfo,
+            GetWorkflowState,
+            SetWorkflowState,
+            GetHouses,
             FillTerrain,
             CreatePlateau,
             DrawRoad,
@@ -25,6 +28,8 @@ namespace TSMapEditor.AI
             PlaceBuildings,
             PlaceUnit,
             PlaceUnits,
+            PlaceInfantry,
+            PlaceInfantries,
             SetSpawnPoint,
             PlaceOre,
             PlaceTrees,
@@ -42,6 +47,39 @@ namespace TSMapEditor.AI
             Name = "get_map_info",
             Description = "获取当前地图的基本信息：尺寸、当前状态、已有出生点等。在创建地图前先调用此工具了解地图情况。",
             Parameters = Schema(new Dictionary<string, object>()) // No params
+        };
+
+        public static ToolDefinition GetWorkflowState => new ToolDefinition
+        {
+            Name = "get_workflow_state",
+            Description = "查询当前地图编辑任务的工作流状态。包含用户原始目标、当前阶段、已完成的步骤、待处理的步骤、已知风险、当前选区和校验问题。在进行多步复杂编辑或当你忘记当前任务进度时，调用此工具来获取上下文。",
+            Parameters = Schema(new Dictionary<string, object>()) // No params
+        };
+
+        public static ToolDefinition GetHouses => new ToolDefinition
+        {
+            Name = "get_houses",
+            Description = "查询当前地图中所有可用的所属方(House/Owner)列表及其详细信息。在放置需要指定所属方的建筑/单位/步兵前，如果不确定可用的所属方名称，请先调用此工具获取精确的 owner ININame。",
+            Parameters = Schema(new Dictionary<string, object>()) // No params
+        };
+
+        public static ToolDefinition SetWorkflowState => new ToolDefinition
+        {
+            Name = "set_workflow_state",
+            Description = "更新当前任务的工作流状态（控制面工具，不会修改地图数据）。用于记录用户目标、当前意图、执行阶段和步骤进度。在开始多步任务前调用此工具设定意图和目标，执行过程中更新已完成/待处理的步骤。",
+            Parameters = Schema(new Dictionary<string, object>
+            {
+                ["user_goal"] = PropString("用户的编辑目标/需求描述"),
+                ["intent"] = PropEnum("任务意图类型", new[]
+                {
+                    "BalancedSkirmish", "CreativeSkirmish", "SurvivalChallenge",
+                    "TowerDefense", "ScenarioStory", "BeautifyExistingMap", "LocalEdit"
+                }),
+                ["current_phase"] = PropString("当前执行阶段（如 Planning, Terrain, Structures, Decoration, Done）"),
+                ["completed_steps"] = PropStringArray("已完成的步骤列表"),
+                ["pending_steps"] = PropStringArray("待处理的步骤列表"),
+                ["known_risks"] = PropStringArray("已知的风险/注意事项列表"),
+            }) // No required params
         };
 
         // ─── Terrain Tools ──────────────────────────────────────────
@@ -131,7 +169,7 @@ namespace TSMapEditor.AI
         public static ToolDefinition PlaceUnit => new ToolDefinition
         {
             Name = "place_unit",
-            Description = "放置一个载具单位。批量放置请用 place_units。",
+            Description = "放置一个载具单位(Vehicle)。批量放置请用 place_units。如果是步兵/士兵，请用 place_infantry。",
             Parameters = Schema(new Dictionary<string, object>
             {
                 ["position"] = PropEnum("放置位置", PositionEnum),
@@ -171,7 +209,7 @@ namespace TSMapEditor.AI
         public static ToolDefinition PlaceUnits => new ToolDefinition
         {
             Name = "place_units",
-            Description = "批量放置多个载具单位。一次调用放置多个单位，比多次调用 place_unit 更高效。",
+            Description = "批量放置多个载具单位(Vehicles)。如果是步兵/士兵，请用 place_infantries。",
             Parameters = Schema(new Dictionary<string, object>
             {
                 ["items"] = new Dictionary<string, object>
@@ -184,6 +222,46 @@ namespace TSMapEditor.AI
                         ["properties"] = new Dictionary<string, object>
                         {
                             ["name"] = PropString("单位INI名称"),
+                            ["x_pct"] = PropInt("X百分比", 0, 100),
+                            ["y_pct"] = PropInt("Y百分比", 0, 100),
+                            ["owner"] = PropString("所属方(默认Neutral)"),
+                        },
+                        ["required"] = new[] { "name", "x_pct", "y_pct" }
+                    }
+                }
+            }, required: new[] { "items" })
+        };
+
+        public static ToolDefinition PlaceInfantry => new ToolDefinition
+        {
+            Name = "place_infantry",
+            Description = "放置一个步兵/士兵单位(Infantry)。",
+            Parameters = Schema(new Dictionary<string, object>
+            {
+                ["position"] = PropEnum("放置位置", PositionEnum),
+                ["x_pct"] = PropInt("X百分比", 0, 100),
+                ["y_pct"] = PropInt("Y百分比", 0, 100),
+                ["name"] = PropString("步兵INI名称"),
+                ["owner"] = PropEnum("所属方", new[] { "Neutral", "Special", "GDI", "Nod" }),
+            }, required: new[] { "name" })
+        };
+
+        public static ToolDefinition PlaceInfantries => new ToolDefinition
+        {
+            Name = "place_infantries",
+            Description = "批量放置多个步兵/士兵单位(Infantry)。",
+            Parameters = Schema(new Dictionary<string, object>
+            {
+                ["items"] = new Dictionary<string, object>
+                {
+                    ["type"] = "array",
+                    ["description"] = "要放置的步兵列表",
+                    ["items"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "object",
+                        ["properties"] = new Dictionary<string, object>
+                        {
+                            ["name"] = PropString("步兵INI名称"),
                             ["x_pct"] = PropInt("X百分比", 0, 100),
                             ["y_pct"] = PropInt("Y百分比", 0, 100),
                             ["owner"] = PropString("所属方(默认Neutral)"),
@@ -340,6 +418,16 @@ namespace TSMapEditor.AI
             {
                 ["type"] = "string",
                 ["description"] = description
+            };
+        }
+
+        private static Dictionary<string, object> PropStringArray(string description)
+        {
+            return new Dictionary<string, object>
+            {
+                ["type"] = "array",
+                ["description"] = description,
+                ["items"] = new Dictionary<string, object> { ["type"] = "string" }
             };
         }
     }
