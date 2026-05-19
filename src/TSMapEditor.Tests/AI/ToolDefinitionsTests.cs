@@ -123,4 +123,86 @@ public class ToolDefinitionsTests
             Assert.True(reqArray == null || reqArray.Length == 0);
         }
     }
+
+    // ─── coordinate_scope Tests ────────────────────────────────
+
+    private static bool HasCoordinateScope(ToolDefinition tool)
+    {
+        if (!tool.Parameters.TryGetValue("properties", out var propsObj))
+            return false;
+        var props = propsObj as Dictionary<string, object>;
+        return props != null && props.ContainsKey("coordinate_scope");
+    }
+
+    private static bool BatchItemHasCoordinateScope(ToolDefinition tool)
+    {
+        if (!tool.Parameters.TryGetValue("properties", out var propsObj))
+            return false;
+        var props = propsObj as Dictionary<string, object>;
+        if (props == null || !props.TryGetValue("items", out var itemsObj))
+            return false;
+        var itemsDef = itemsObj as Dictionary<string, object>;
+        if (itemsDef == null || !itemsDef.TryGetValue("items", out var itemSchemaObj))
+            return false;
+        var itemSchema = itemSchemaObj as Dictionary<string, object>;
+        if (itemSchema == null || !itemSchema.TryGetValue("properties", out var itemPropsObj))
+            return false;
+        var itemProps = itemPropsObj as Dictionary<string, object>;
+        return itemProps != null && itemProps.ContainsKey("coordinate_scope");
+    }
+
+    [Theory]
+    [InlineData("place_building")]
+    [InlineData("place_ore")]
+    [InlineData("draw_road")]
+    [InlineData("place_unit")]
+    [InlineData("place_infantry")]
+    [InlineData("create_plateau")]
+    [InlineData("place_trees")]
+    [InlineData("place_decorations")]
+    [InlineData("clear_area")]
+    [InlineData("place_tile")]
+    [InlineData("draw_river")]
+    public void PositionBearingTools_ExposeCoordinateScope(string toolName)
+    {
+        var tools = ToolDefinitions.GetAllTools();
+        var tool = tools.FirstOrDefault(t => t.Name == toolName);
+        Assert.NotNull(tool);
+        Assert.True(HasCoordinateScope(tool), $"{toolName} should have coordinate_scope property");
+    }
+
+    [Fact]
+    public void SetSpawnPoint_DoesNotExposeCoordinateScope()
+    {
+        Assert.False(HasCoordinateScope(ToolDefinitions.SetSpawnPoint),
+            "set_spawn_point should NOT have coordinate_scope — it is always global");
+    }
+
+    [Theory]
+    [InlineData("place_buildings")]
+    [InlineData("place_units")]
+    [InlineData("place_infantries")]
+    public void BatchTools_ItemSchemaExposesCoordinateScope(string toolName)
+    {
+        var tools = ToolDefinitions.GetAllTools();
+        var tool = tools.FirstOrDefault(t => t.Name == toolName);
+        Assert.NotNull(tool);
+        Assert.True(BatchItemHasCoordinateScope(tool),
+            $"{toolName} batch item schema should have coordinate_scope property");
+    }
+
+    [Fact]
+    public void CoordinateScope_HasCorrectEnumValues()
+    {
+        var tool = ToolDefinitions.PlaceBuilding;
+        var props = tool.Parameters["properties"] as Dictionary<string, object>;
+        Assert.NotNull(props);
+        var scopeProp = props["coordinate_scope"] as Dictionary<string, object>;
+        Assert.NotNull(scopeProp);
+        var enumValues = scopeProp["enum"] as string[];
+        Assert.NotNull(enumValues);
+        Assert.Equal(2, enumValues.Length);
+        Assert.Contains("selection", enumValues);
+        Assert.Contains("global", enumValues);
+    }
 }

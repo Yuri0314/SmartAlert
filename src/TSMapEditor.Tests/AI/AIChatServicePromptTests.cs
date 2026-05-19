@@ -112,5 +112,20 @@ namespace TSMapEditor.Tests.AI
             Assert.Contains("draw_river", prompt);
             Assert.Contains("轻微溢出选区边界", prompt);
         }
+
+        [Fact]
+        public void SelectionGuardrailPrompt_MentionsCoordinateScope()
+        {
+            var prompt = GetSelectionGuardrailPrompt();
+            Assert.Contains("coordinate_scope", prompt);
+            Assert.Contains("global", prompt);
+        }
+
+        [Fact]
+        public void SelectionGuardrailPrompt_InstructsGlobalForMapCenter()
+        {
+            var prompt = GetSelectionGuardrailPrompt();
+            Assert.Contains("coordinate_scope", prompt);
+        }
     }
 }

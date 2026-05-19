@@ -153,7 +153,12 @@ namespace TSMapEditor.AI
         /// - 0%/0% maps to selection top-left (X, Y).
         /// - 100%/100% maps to selection bottom-right (X+Width-1, Y+Height-1).
         /// - Semantic positions are mapped relative to the selection bounds.
-        /// - Final result is clamped to the map diamond.
+        ///
+        /// NOTE: Unlike full-map Resolve(), this method does NOT apply ClampToDiamond().
+        /// UI selections are created from real map cell coordinates by AISelectionCursorAction,
+        /// so points computed within the selection rectangle are already valid map cells.
+        /// Applying the full-map diamond projection would pull off-center selections toward
+        /// the theoretical map center, displacing coordinates outside the selected area.
         /// </summary>
         public Point2D ResolveWithinSelection(AISelection selection, string semantic = null, int? xPct = null, int? yPct = null)
         {
@@ -181,11 +186,11 @@ namespace TSMapEditor.AI
             else
                 y = selection.Y + (int)Math.Round((double)clampedY / 100.0 * (selection.Height - 1));
 
-            // Clamp to selection bounds
+            // Clamp to selection bounds (no full-map diamond clamp — see XML comment)
             x = Math.Max(selection.X, Math.Min(selRight, x));
             y = Math.Max(selection.Y, Math.Min(selBottom, y));
 
-            return ClampToDiamond(new Point2D(x, y));
+            return new Point2D(x, y);
         }
 
         /// <summary>

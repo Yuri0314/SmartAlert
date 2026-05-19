@@ -296,11 +296,11 @@ namespace TSMapEditor.Tests.AI
 
             var lines = System.IO.File.ReadAllLines(sourcePath);
 
-            CheckMethodContains(lines, "ExecuteCreatePlateau", "ResolvePosition(args, PositionScope.SelectionWhenActive)");
-            CheckMethodContains(lines, "ExecutePlaceOre", "ResolvePosition(args, PositionScope.SelectionWhenActive)");
-            CheckMethodContains(lines, "ExecutePlaceTrees", "ResolvePosition(args, PositionScope.SelectionWhenActive)");
-            CheckMethodContains(lines, "ExecuteClearArea", "ResolvePosition(args, PositionScope.SelectionWhenActive)");
-            CheckMethodContains(lines, "ExecutePlaceDecorations", "ResolvePosition(args, PositionScope.SelectionWhenActive)");
+            CheckMethodContains(lines, "ExecuteCreatePlateau", "ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive)");
+            CheckMethodContains(lines, "ExecutePlaceOre", "ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive)");
+            CheckMethodContains(lines, "ExecutePlaceTrees", "ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive)");
+            CheckMethodContains(lines, "ExecuteClearArea", "ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive)");
+            CheckMethodContains(lines, "ExecutePlaceDecorations", "ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive)");
             CheckMethodContains(lines, "ExecuteSetSpawnPoint", "ResolvePosition(args, PositionScope.Global)");
         }
 
@@ -365,6 +365,111 @@ namespace TSMapEditor.Tests.AI
                     Assert.Fail($"Method {methodName} should not contain '{expectedContent}'");
                 }
             }
+        }
+
+        // ─── P0: BUG-F3 off-center selection endpoint test ──────
+
+        [Fact]
+        public void ResolveEndpoint_OffCenterSelection_UsesSelectionCorners()
+        {
+            var selection = new AISelection(142, 93, 12, 9);
+            var executor = CreateUninitializedExecutor(selection);
+            var selectionScope = ParsePositionScope("SelectionWhenActive");
+
+            var method = typeof(ToolExecutor).GetMethod("ResolveEndpoint",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(method);
+
+            using var docFrom = JsonDocument.Parse("{\"from_x_pct\":0,\"from_y_pct\":0}");
+            var from = Assert.IsType<Point2D>(method.Invoke(executor,
+                new object[] { docFrom.RootElement, "from_position", "from_x_pct", "from_y_pct", selectionScope }));
+
+            using var docTo = JsonDocument.Parse("{\"to_x_pct\":100,\"to_y_pct\":100}");
+            var to = Assert.IsType<Point2D>(method.Invoke(executor,
+                new object[] { docTo.RootElement, "to_position", "to_x_pct", "to_y_pct", selectionScope }));
+
+            Assert.Equal(142, from.X);
+            Assert.Equal(93, from.Y);
+            Assert.Equal(153, to.X);
+            Assert.Equal(101, to.Y);
+        }
+
+        // ─── P1: coordinate_scope override tests ─────────────────
+
+        [Fact]
+        public void ResolveRequestedPositionScope_Global_OverridesDefault()
+        {
+            var method = typeof(ToolExecutor).GetMethod("ResolveRequestedPositionScope",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            using var doc = JsonDocument.Parse("{\"x_pct\":50,\"y_pct\":50,\"coordinate_scope\":\"global\"}");
+            var defaultScope = ParsePositionScope("SelectionWhenActive");
+            var result = method.Invoke(null, new object[] { doc.RootElement, defaultScope });
+            var globalScope = ParsePositionScope("Global");
+            Assert.Equal(globalScope, result);
+        }
+
+        [Fact]
+        public void ResolveRequestedPositionScope_Omitted_KeepsDefault()
+        {
+            var method = typeof(ToolExecutor).GetMethod("ResolveRequestedPositionScope",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            using var doc = JsonDocument.Parse("{\"x_pct\":50,\"y_pct\":50}");
+            var defaultScope = ParsePositionScope("SelectionWhenActive");
+            var result = method.Invoke(null, new object[] { doc.RootElement, defaultScope });
+            Assert.Equal(defaultScope, result);
+        }
+
+        [Fact]
+        public void ResolvePosition_CoordinateScopeGlobal_ResolvesToMapCenter()
+        {
+            var selection = new AISelection(142, 93, 12, 9);
+            var executor = CreateUninitializedExecutor(selection);
+
+            var resolvePosition = typeof(ToolExecutor).GetMethod("ResolvePosition",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(resolvePosition);
+
+            using var doc = JsonDocument.Parse("{\"x_pct\":50,\"y_pct\":50,\"coordinate_scope\":\"global\"}");
+            var globalScope = ParsePositionScope("Global");
+            var pos = Assert.IsType<Point2D>(resolvePosition.Invoke(executor,
+                new object[] { doc.RootElement, globalScope }));
+
+            // Full-map center of a 200x200 map = (199,199)
+            Assert.Equal(199, pos.X);
+            Assert.Equal(199, pos.Y);
+        }
+
+        [Fact]
+        public void ResolveEndpoint_CoordinateScopeGlobal_UsesFullMapCorners()
+        {
+            var selection = new AISelection(142, 93, 12, 9);
+            var executor = CreateUninitializedExecutor(selection);
+
+            var method = typeof(ToolExecutor).GetMethod("ResolveEndpoint",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(method);
+
+            var globalScope = ParsePositionScope("Global");
+
+            using var docFrom = JsonDocument.Parse("{\"from_x_pct\":0,\"from_y_pct\":0}");
+            var from = Assert.IsType<Point2D>(method.Invoke(executor,
+                new object[] { docFrom.RootElement, "from_position", "from_x_pct", "from_y_pct", globalScope }));
+
+            using var docTo = JsonDocument.Parse("{\"to_x_pct\":100,\"to_y_pct\":100}");
+            var to = Assert.IsType<Point2D>(method.Invoke(executor,
+                new object[] { docTo.RootElement, "to_position", "to_x_pct", "to_y_pct", globalScope }));
+
+            // Full-map (0%,0%) should NOT be selection corner (142,93)
+            Assert.NotEqual(142, from.X);
+            Assert.NotEqual(93, from.Y);
+
+            // Full-map (100%,100%) should NOT be selection corner (153,101)
+            Assert.NotEqual(153, to.X);
+            Assert.NotEqual(101, to.Y);
         }
     }
 }

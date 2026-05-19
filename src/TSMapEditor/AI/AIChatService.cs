@@ -510,7 +510,15 @@ namespace TSMapEditor.AI
 - draw_road 和 draw_river 的起点与终点在有选区时同样是相对于选区的，但请注意，渲染出的路径宽度可能会轻微溢出选区边界，这是已知的限制。如果对边缘精度要求极高，请避免在选区边缘画宽路或向用户解释此限制。
 - 绝对全局工具：set_spawn_point 和 set_map_name 永远作用于全图，不受选区约束。
 - 非修改类工具：get_map_info, get_workflow_state, set_workflow_state, get_houses 等属于查询和控制工具，不会修改任何地形或选区内容。
-- 严禁行为：不得在未实际调用任何校验工具的情况下，虚构并声称选区编辑已通过质量检查。";
+- 严禁行为：不得在未实际调用任何校验工具的情况下，虚构并声称选区编辑已通过质量检查。
+
+--- coordinate_scope 参数 ---
+大多数局部编辑工具支持可选参数 `coordinate_scope`（值为 ""selection"" 或 ""global""）：
+- 省略或 ""selection""（默认）：有选区时按选区相对坐标解释。
+- ""global""：即使有活跃选区，也按全地图坐标解释百分比/方位。
+当用户明确说「地图中心」「全图中心」「whole map center」或要求在全地图范围操作时，设置 coordinate_scope 为 ""global""。
+当用户说「选区中心」「在选区里」或给出局部选定区域的指令时，省略 coordinate_scope 或设为 ""selection""。
+不要为了模拟全局坐标而去清除选区——使用 coordinate_scope: ""global"" 即可。";
         }
 
         private static string BuildOwnerGuardrailPrompt()

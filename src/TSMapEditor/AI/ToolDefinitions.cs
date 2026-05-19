@@ -115,6 +115,7 @@ namespace TSMapEditor.AI
                 ["y_pct"] = PropInt("中心Y百分比(0=最上,100=最下)", 0, 100),
                 ["size"] = PropEnum("高地大小", new[] { "small", "medium", "large" }),
                 ["height"] = PropInt("高度级数(1-4)", 1, 4),
+                ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "size" })
         };
 
@@ -131,6 +132,7 @@ namespace TSMapEditor.AI
                 ["to_x_pct"] = PropInt("终点X百分比", 0, 100),
                 ["to_y_pct"] = PropInt("终点Y百分比", 0, 100),
                 ["width"] = PropInt("路宽(格数)", 3, 6),
+                ["coordinate_scope"] = PropCoordinateScope(),
             })
         };
 
@@ -147,6 +149,7 @@ namespace TSMapEditor.AI
                 ["to_x_pct"] = PropInt("终点X百分比", 0, 100),
                 ["to_y_pct"] = PropInt("终点Y百分比", 0, 100),
                 ["width"] = PropInt("河宽(格数，至少8)", 8, 15),
+                ["coordinate_scope"] = PropCoordinateScope(),
             })
         };
 
@@ -163,6 +166,7 @@ namespace TSMapEditor.AI
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["name"] = PropString("建筑INI名称(如GAWEAP,NACNST)"),
                 ["owner"] = PropEnum("所属方", new[] { "Neutral", "Special", "GDI", "Nod" }),
+                ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "name" })
         };
 
@@ -177,6 +181,7 @@ namespace TSMapEditor.AI
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["name"] = PropString("单位INI名称"),
                 ["owner"] = PropEnum("所属方", new[] { "Neutral", "Special", "GDI", "Nod" }),
+                ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "name" })
         };
 
@@ -199,6 +204,7 @@ namespace TSMapEditor.AI
                             ["x_pct"] = PropInt("X百分比", 0, 100),
                             ["y_pct"] = PropInt("Y百分比", 0, 100),
                             ["owner"] = PropString("所属方(默认Neutral)"),
+                            ["coordinate_scope"] = PropCoordinateScope(),
                         },
                         ["required"] = new[] { "name", "x_pct", "y_pct" }
                     }
@@ -225,6 +231,7 @@ namespace TSMapEditor.AI
                             ["x_pct"] = PropInt("X百分比", 0, 100),
                             ["y_pct"] = PropInt("Y百分比", 0, 100),
                             ["owner"] = PropString("所属方(默认Neutral)"),
+                            ["coordinate_scope"] = PropCoordinateScope(),
                         },
                         ["required"] = new[] { "name", "x_pct", "y_pct" }
                     }
@@ -243,6 +250,7 @@ namespace TSMapEditor.AI
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["name"] = PropString("步兵INI名称"),
                 ["owner"] = PropEnum("所属方", new[] { "Neutral", "Special", "GDI", "Nod" }),
+                ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "name" })
         };
 
@@ -265,6 +273,7 @@ namespace TSMapEditor.AI
                             ["x_pct"] = PropInt("X百分比", 0, 100),
                             ["y_pct"] = PropInt("Y百分比", 0, 100),
                             ["owner"] = PropString("所属方(默认Neutral)"),
+                            ["coordinate_scope"] = PropCoordinateScope(),
                         },
                         ["required"] = new[] { "name", "x_pct", "y_pct" }
                     }
@@ -296,6 +305,7 @@ namespace TSMapEditor.AI
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["amount"] = PropEnum("矿石数量", new[] { "small", "medium", "large" }),
                 ["type"] = PropEnum("矿石类型", new[] { "ore", "gems" }),
+                ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "amount" })
         };
 
@@ -309,6 +319,7 @@ namespace TSMapEditor.AI
                 ["x_pct"] = PropInt("X百分比", 0, 100),
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["density"] = PropEnum("树木密度", new[] { "sparse", "medium", "dense" }),
+                ["coordinate_scope"] = PropCoordinateScope(),
             })
         };
 
@@ -323,6 +334,7 @@ namespace TSMapEditor.AI
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["density"] = PropEnum("装饰密度", new[] { "sparse", "medium", "dense" }),
                 ["radius"] = PropInt("散布半径(格数)", 3, 20),
+                ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "density" })
         };
 
@@ -336,6 +348,7 @@ namespace TSMapEditor.AI
                 ["x_pct"] = PropInt("X百分比", 0, 100),
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["radius"] = PropInt("清除半径(格数)", 3, 30),
+                ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "radius" })
         };
 
@@ -372,6 +385,7 @@ namespace TSMapEditor.AI
                 ["x_pct"] = PropInt("X百分比(0=最左,100=最右)", 0, 100),
                 ["y_pct"] = PropInt("Y百分比(0=最上,100=最下)", 0, 100),
                 ["variant_index"] = PropInt("地块变体编号(0开始)，不指定则随机选择", 0, 100),
+                ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "tileset_name" })
         };
 
@@ -429,6 +443,13 @@ namespace TSMapEditor.AI
                 ["description"] = description,
                 ["items"] = new Dictionary<string, object> { ["type"] = "string" }
             };
+        }
+
+        private static Dictionary<string, object> PropCoordinateScope()
+        {
+            return PropEnum(
+                "坐标作用域：selection=有选区时按选区相对坐标解释（默认）；global=即使有选区也按全地图坐标解释。当用户明确说'地图中心'或'全图'时使用global。",
+                new[] { "selection", "global" });
         }
     }
 }

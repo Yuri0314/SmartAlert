@@ -42,10 +42,19 @@ namespace TSMapEditor.Mutations.Classes
         private readonly List<Point2D> positions;
         private readonly string description;
 
-        // Track placed objects for undo
+        // Track placed objects for undo and result reporting
         private readonly List<Structure> placedBuildings = new List<Structure>();
         private readonly List<Unit> placedUnits = new List<Unit>();
         private readonly List<Infantry> placedInfantry = new List<Infantry>();
+
+        /// <summary>Number of positions requested for placement.</summary>
+        public int RequestedCount => positions?.Count ?? 0;
+
+        /// <summary>Number of objects actually placed after Perform().</summary>
+        public int PlacedCount => placedBuildings.Count + placedUnits.Count + placedInfantry.Count;
+
+        /// <summary>Whether any objects were successfully placed.</summary>
+        public bool PlacedAny => PlacedCount > 0;
 
         public override string GetDisplayString()
         {
@@ -56,6 +65,11 @@ namespace TSMapEditor.Mutations.Classes
 
         public override void Perform()
         {
+            // Clear previous state to ensure accurate counts if Perform() is called more than once
+            placedBuildings.Clear();
+            placedUnits.Clear();
+            placedInfantry.Clear();
+
             var map = MutationTarget.Map;
 
             foreach (var pos in positions)

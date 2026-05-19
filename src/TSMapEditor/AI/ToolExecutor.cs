@@ -126,6 +126,19 @@ namespace TSMapEditor.AI
         // ─── Position Helpers ───────────────────────────────────────
 
         /// <summary>
+        /// Reads the optional "coordinate_scope" parameter from tool args.
+        /// If the AI passes coordinate_scope=global, returns Global regardless of the default.
+        /// Otherwise returns the default scope (typically SelectionWhenActive for local tools).
+        /// </summary>
+        private static PositionScope ResolveRequestedPositionScope(JsonElement args, PositionScope defaultScope)
+        {
+            string coordinateScope = args.TryGetString("coordinate_scope");
+            if (string.Equals(coordinateScope, "global", System.StringComparison.OrdinalIgnoreCase))
+                return PositionScope.Global;
+            return defaultScope;
+        }
+
+        /// <summary>
         /// Resolves position with selection-awareness when a selection is active.
         /// Local tools use SelectionWhenActive; global tools use Global.
         /// </summary>
@@ -431,7 +444,7 @@ namespace TSMapEditor.AI
             }
             else
             {
-                var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
+                var pos = ResolvePosition(args, ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive));
                 int patchRadius = scope switch
                 {
                     "small_patch" => 5,
@@ -459,7 +472,7 @@ namespace TSMapEditor.AI
 
         private string ExecuteCreatePlateau(JsonElement args)
         {
-            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
+            var pos = ResolvePosition(args, ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive));
             string size = args.GetProperty("size").GetString();
             int height = args.TryGetInt("height") ?? 2;
 
@@ -503,8 +516,9 @@ namespace TSMapEditor.AI
 
         private string ExecuteDrawRoad(JsonElement args)
         {
-            var from = ResolveEndpoint(args, "from_position", "from_x_pct", "from_y_pct");
-            var to = ResolveEndpoint(args, "to_position", "to_x_pct", "to_y_pct");
+            var scope = ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive);
+            var from = ResolveEndpoint(args, "from_position", "from_x_pct", "from_y_pct", scope);
+            var to = ResolveEndpoint(args, "to_position", "to_x_pct", "to_y_pct", scope);
             int width = args.TryGetInt("width") ?? 4;
             width = Math.Max(3, Math.Min(6, width));
 
@@ -527,8 +541,9 @@ namespace TSMapEditor.AI
 
         private string ExecuteDrawRiver(JsonElement args)
         {
-            var from = ResolveEndpoint(args, "from_position", "from_x_pct", "from_y_pct");
-            var to = ResolveEndpoint(args, "to_position", "to_x_pct", "to_y_pct");
+            var scope = ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive);
+            var from = ResolveEndpoint(args, "from_position", "from_x_pct", "from_y_pct", scope);
+            var to = ResolveEndpoint(args, "to_position", "to_x_pct", "to_y_pct", scope);
             int width = args.TryGetInt("width") ?? 10;
             width = Math.Max(8, Math.Min(15, width));
 
@@ -610,8 +625,9 @@ namespace TSMapEditor.AI
 
         private string ExecutePlaceObject(JsonElement args, AIPlaceObjectType objectType)
         {
-            AISelection activeSelection = GetActiveSelection(PositionScope.SelectionWhenActive);
-            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
+            var resolvedScope = ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive);
+            AISelection activeSelection = GetActiveSelection(resolvedScope);
+            var pos = ResolvePosition(args, resolvedScope);
             string name = args.GetProperty("name").GetString();
             string ownerName = args.TryGetString("owner") ?? "Neutral";
 
@@ -694,6 +710,9 @@ namespace TSMapEditor.AI
                 resolvedName, owner, positions, $"放置 {resolvedName}");
             mutationManager.PerformMutation(mutation);
 
+            if (!mutation.PlacedAny)
+                return $"❌ 未能放置 {resolvedName}：当前位置不可用或该对象无法在当前规则中创建";
+
             return $"✓ 已在 {GetPositionDescription(args)} 放置 {resolvedName}（{owner.ININame}）{relocateNote}";
         }
 
@@ -722,7 +741,8 @@ namespace TSMapEditor.AI
                     int yPct = item.TryGetProperty("y_pct", out var yp) ? ParseJsonInt(yp, 50) : 50;
                     string ownerName = item.TryGetProperty("owner", out var ow) ? ow.GetString() ?? "Neutral" : "Neutral";
 
-                    var pos = ResolvePercentagePosition(xPct, yPct, PositionScope.SelectionWhenActive);
+                    var itemScope = ResolveRequestedPositionScope(item, PositionScope.SelectionWhenActive);
+                    var pos = ResolvePercentagePosition(xPct, yPct, itemScope);
 
                     string resolvedName = ResolveObjectININame(name, objectType);
                     if (resolvedName == null)
@@ -808,7 +828,16 @@ namespace TSMapEditor.AI
                     var mutation = new AIPlaceObjectMutation(mutationTarget, objectType,
                         resolvedName, owner, positions, $"批量放置 {resolvedName}");
                     mutationManager.PerformMutation(mutation);
-                    successCount++;
+
+                    if (mutation.PlacedAny)
+                    {
+                        successCount++;
+                    }
+                    else
+                    {
+                        errors.Add($"{resolvedName}(放置失败：位置不可用或对象无法创建)");
+                        failCount++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -883,7 +912,7 @@ namespace TSMapEditor.AI
 
         private string ExecutePlaceOre(JsonElement args)
         {
-            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
+            var pos = ResolvePosition(args, ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive));
             string amount = args.GetProperty("amount").GetString();
             string type = args.TryGetString("type") ?? "ore";
 
@@ -947,7 +976,7 @@ namespace TSMapEditor.AI
 
         private string ExecutePlaceTrees(JsonElement args)
         {
-            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
+            var pos = ResolvePosition(args, ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive));
             string density = args.TryGetString("density") ?? "medium";
 
             // Get curated tree types for current theater (visually coherent, 3-5 types)
@@ -1028,7 +1057,7 @@ namespace TSMapEditor.AI
 
         private string ExecuteClearArea(JsonElement args)
         {
-            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
+            var pos = ResolvePosition(args, ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive));
             int radius = args.GetProperty("radius").GetInt32();
             radius = Math.Max(3, Math.Min(30, radius));
             // Clamp clear rectangle to selection bounds
@@ -1054,7 +1083,7 @@ namespace TSMapEditor.AI
 
         private string ExecutePlaceDecorations(JsonElement args)
         {
-            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
+            var pos = ResolvePosition(args, ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive));
             string density = args.TryGetString("density") ?? "medium";
             int radius = args.TryGetInt("radius") ?? 8;
             radius = Math.Max(3, Math.Min(20, radius));
@@ -1633,7 +1662,7 @@ namespace TSMapEditor.AI
             int tileIndex = matchedSet.StartTileIndex + actualVariant;
 
             // Get position
-            var pos = ResolvePosition(args, PositionScope.SelectionWhenActive);
+            var pos = ResolvePosition(args, ResolveRequestedPositionScope(args, PositionScope.SelectionWhenActive));
 
             // Place the tile using a small 1x1 mutation
             var cell = map.GetTile(pos.X, pos.Y);
@@ -1668,20 +1697,31 @@ namespace TSMapEditor.AI
             return -1;
         }
 
-        private string ResolveObjectININame(string name, AIPlaceObjectType objectType)
+        private List<TechnoType> GetObjectTypes(AIPlaceObjectType objectType)
         {
-            // Try Chinese alias exact resolution first
-            string aliasCode = AIUnitAliasResolver.ResolveExact(unitAliases, name, objectType);
-            if (aliasCode != null)
-                return aliasCode;
-
-            List<TechnoType> types = objectType switch
+            return objectType switch
             {
                 AIPlaceObjectType.Building => map.Rules.BuildingTypes.Cast<TechnoType>().ToList(),
                 AIPlaceObjectType.Vehicle => map.Rules.UnitTypes.Cast<TechnoType>().ToList(),
                 AIPlaceObjectType.Infantry => map.Rules.InfantryTypes.Cast<TechnoType>().ToList(),
                 _ => new List<TechnoType>()
             };
+        }
+
+        private string ResolveObjectININame(string name, AIPlaceObjectType objectType)
+        {
+            List<TechnoType> types = GetObjectTypes(objectType);
+
+            // Try Chinese alias exact resolution first, but validate against loaded rules
+            string aliasCode = AIUnitAliasResolver.ResolveExact(unitAliases, name, objectType);
+            if (aliasCode != null)
+            {
+                var aliasMatch = types.Find(t => t.ININame.Equals(aliasCode, StringComparison.OrdinalIgnoreCase));
+                if (aliasMatch != null)
+                    return aliasMatch.ININame;
+
+                Logger.Log($"ToolExecutor: alias '{name}' resolved to '{aliasCode}' but no matching {objectType} type exists in loaded rules. Falling through to search.");
+            }
 
             // Exact → case-insensitive → partial → display name
             var match = types.Find(t => t.ININame == name)
@@ -1694,13 +1734,7 @@ namespace TSMapEditor.AI
 
         private List<string> FindSimilarNames(string name, AIPlaceObjectType objectType, int maxResults)
         {
-            List<TechnoType> types = objectType switch
-            {
-                AIPlaceObjectType.Building => map.Rules.BuildingTypes.Cast<TechnoType>().ToList(),
-                AIPlaceObjectType.Vehicle => map.Rules.UnitTypes.Cast<TechnoType>().ToList(),
-                AIPlaceObjectType.Infantry => map.Rules.InfantryTypes.Cast<TechnoType>().ToList(),
-                _ => new List<TechnoType>()
-            };
+            List<TechnoType> types = GetObjectTypes(objectType);
 
             string nameLower = name.ToLowerInvariant();
             return types

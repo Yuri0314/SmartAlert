@@ -154,5 +154,73 @@ namespace TSMapEditor.Tests.AI
             Assert.Equal(200, pos.X);
             Assert.Equal(190, pos.Y);
         }
+
+        // ─── BUG-F1a / BUG-F3: Off-center selection regression tests ──
+
+        [Fact]
+        public void ResolveWithinSelection_OffCenterSelection_FiftyFiftyStaysAtSelectionCenter()
+        {
+            // Reproduces BUG-F1a from live verification.
+            // Selection (142,93) 12x9 is far from map center (199,199).
+            // 50%/50% should resolve to approximately (148,97) — the selection center.
+            var resolver = CreateResolver();
+            var selection = new AISelection(142, 93, 12, 9);
+
+            var pos = resolver.ResolveWithinSelection(selection, null, 50, 50);
+
+            // Expected center: (142 + round(0.5*11), 93 + round(0.5*8)) = (148, 97)
+            int expectedX = 142 + (int)System.Math.Round(0.5 * 11); // 148
+            int expectedY = 93 + (int)System.Math.Round(0.5 * 8);   // 97
+
+            Assert.True(pos.X >= selection.X && pos.X <= selection.X + selection.Width - 1,
+                $"Expected X in [{selection.X}, {selection.X + selection.Width - 1}], got {pos.X}");
+            Assert.True(pos.Y >= selection.Y && pos.Y <= selection.Y + selection.Height - 1,
+                $"Expected Y in [{selection.Y}, {selection.Y + selection.Height - 1}], got {pos.Y}");
+            Assert.Equal(expectedX, pos.X);
+            Assert.Equal(expectedY, pos.Y);
+        }
+
+        [Fact]
+        public void ResolveWithinSelection_OffCenterSelection_CornersStayAtSelectionCorners()
+        {
+            // Reproduces BUG-F3 from live verification.
+            // (0%,0%) → (142,93), (100%,100%) → (153,101).
+            // ClampToDiamond must not displace these.
+            var resolver = CreateResolver();
+            var selection = new AISelection(142, 93, 12, 9);
+
+            var topLeft = resolver.ResolveWithinSelection(selection, null, 0, 0);
+            var bottomRight = resolver.ResolveWithinSelection(selection, null, 100, 100);
+
+            Assert.Equal(142, topLeft.X);
+            Assert.Equal(93, topLeft.Y);
+            Assert.Equal(153, bottomRight.X);
+            Assert.Equal(101, bottomRight.Y);
+        }
+
+        [Fact]
+        public void ResolveWithinSelection_OffCenterSelection_AllPointsStayInsideSelection()
+        {
+            // Verifies that no percentage-based resolution escapes the selection bounds,
+            // regardless of where the selection is on the map.
+            var resolver = CreateResolver();
+            var selection = new AISelection(142, 93, 12, 9);
+
+            int selRight = selection.X + selection.Width - 1;
+            int selBottom = selection.Y + selection.Height - 1;
+
+            // Test a grid of percentages
+            for (int xPct = 0; xPct <= 100; xPct += 25)
+            {
+                for (int yPct = 0; yPct <= 100; yPct += 25)
+                {
+                    var pos = resolver.ResolveWithinSelection(selection, null, xPct, yPct);
+                    Assert.True(pos.X >= selection.X && pos.X <= selRight,
+                        $"({xPct}%,{yPct}%): Expected X in [{selection.X}, {selRight}], got {pos.X}");
+                    Assert.True(pos.Y >= selection.Y && pos.Y <= selBottom,
+                        $"({xPct}%,{yPct}%): Expected Y in [{selection.Y}, {selBottom}], got {pos.Y}");
+                }
+            }
+        }
     }
 }
