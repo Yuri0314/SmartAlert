@@ -265,8 +265,8 @@ namespace TSMapEditor.UI
                 e.Handled = true;
             }
 
-            // Ctrl+Shift+S starts AI selection mode
-            if (e.PressedKey == Keys.S && Keyboard.IsCtrlHeldDown() && Keyboard.IsShiftHeldDown())
+            // Ctrl+Shift+X starts AI selection mode
+            if (e.PressedKey == Keys.X && Keyboard.IsCtrlHeldDown() && Keyboard.IsShiftHeldDown())
             {
                 StartAISelection();
                 e.Handled = true;

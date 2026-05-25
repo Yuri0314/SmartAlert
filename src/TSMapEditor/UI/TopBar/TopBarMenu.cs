@@ -230,7 +230,7 @@ namespace TSMapEditor.UI.TopBar
             toolsContextMenu.AddItem(Translate(this, "Tools.ConfigureHotkeys", "Configure Hotkeys..."), () => windowController.HotkeyConfigurationWindow.Open(), null, null, null);
             toolsContextMenu.AddItem(" ", null, () => false, null, null);
             toolsContextMenu.AddItem(Translate(this, "Tools.AIAssistant", "AI Assistant (Ctrl+Shift+A)"), () => AIAssistantToggleRequested?.Invoke(this, EventArgs.Empty));
-            toolsContextMenu.AddItem(Translate(this, "Tools.AISelection", "AI Selection (Ctrl+Shift+S)"), () => AISelectionRequested?.Invoke(this, EventArgs.Empty));
+            toolsContextMenu.AddItem(Translate(this, "Tools.AISelection", "AI Selection (Ctrl+Shift+X)"), () => AISelectionRequested?.Invoke(this, EventArgs.Empty));
             toolsContextMenu.AddItem(" ", null, () => false, null, null);
             toolsContextMenu.AddItem(Translate(this, "Tools.About", "About"), () => windowController.AboutWindow.Open(), null, null, null, null);
 
