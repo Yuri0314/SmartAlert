@@ -717,7 +717,7 @@ namespace TSMapEditor.AI
         }
 
         /// <summary>
-        /// Batch placement: handles place_buildings and place_units.
+        /// Batch placement: handles place_buildings, place_units, and place_infantries.
         /// Accepts {"items": [{name, x_pct, y_pct, owner?}, ...]}
         /// </summary>
         private string ExecutePlaceBatch(JsonElement args, AIPlaceObjectType objectType)
@@ -846,7 +846,7 @@ namespace TSMapEditor.AI
                 }
             }
 
-            string typeName = objectType == AIPlaceObjectType.Building ? "建筑" : "载具";
+            string typeName = GetObjectTypeDisplayName(objectType);
             string result = $"✓ 批量放置{typeName}: {successCount}个成功";
             if (failCount > 0)
                 result += $", {failCount}个失败({string.Join(", ", errors)})";

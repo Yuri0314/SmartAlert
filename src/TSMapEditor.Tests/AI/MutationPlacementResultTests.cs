@@ -229,6 +229,67 @@ namespace TSMapEditor.Tests.AI
                 "ExecutePlaceBatch should have a local variable of type AIPlaceObjectMutation to check PlacedAny");
         }
 
+        /// <summary>
+        /// Regression: GetObjectTypeDisplayName returns correct Chinese label for each type.
+        /// Infantry must return "步兵", not fall through to "载具".
+        /// </summary>
+        [Theory]
+        [InlineData(AIPlaceObjectType.Building, "建筑")]
+        [InlineData(AIPlaceObjectType.Vehicle, "载具")]
+        [InlineData(AIPlaceObjectType.Infantry, "步兵")]
+        public void GetObjectTypeDisplayName_ReturnsCorrectLabel(AIPlaceObjectType objectType, string expected)
+        {
+            var method = typeof(TSMapEditor.AI.ToolExecutor).GetMethod("GetObjectTypeDisplayName",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            string result = (string)method.Invoke(null, new object[] { objectType });
+            Assert.Equal(expected, result);
+        }
+
+        /// <summary>
+        /// Regression: ExecutePlaceBatch must call GetObjectTypeDisplayName instead of
+        /// using a hardcoded "Building ? 建筑 : 载具" ternary.
+        /// Verified by checking that the IL contains a call to GetObjectTypeDisplayName.
+        /// </summary>
+        [Fact]
+        public void ExecutePlaceBatch_UsesGetObjectTypeDisplayName()
+        {
+            var batchMethod = typeof(TSMapEditor.AI.ToolExecutor).GetMethod("ExecutePlaceBatch",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(batchMethod);
+
+            var helperMethod = typeof(TSMapEditor.AI.ToolExecutor).GetMethod("GetObjectTypeDisplayName",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(helperMethod);
+
+            // Check IL for a call to GetObjectTypeDisplayName
+            var body = batchMethod.GetMethodBody();
+            Assert.NotNull(body);
+            byte[] il = body.GetILAsByteArray();
+            Assert.NotNull(il);
+
+            int helperToken = helperMethod.MetadataToken;
+            byte[] tokenBytes = BitConverter.GetBytes(helperToken);
+
+            bool found = false;
+            for (int i = 0; i < il.Length - 4; i++)
+            {
+                // call (0x28) or callvirt (0x6F) followed by method token
+                if ((il[i] == 0x28 || il[i] == 0x6F) &&
+                    il[i + 1] == tokenBytes[0] && il[i + 2] == tokenBytes[1] &&
+                    il[i + 3] == tokenBytes[2] && il[i + 4] == tokenBytes[3])
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            Assert.True(found,
+                "ExecutePlaceBatch should call GetObjectTypeDisplayName to generate the result label, " +
+                "not use a hardcoded ternary that omits Infantry.");
+        }
+
         #endregion
 
         #region Helpers
