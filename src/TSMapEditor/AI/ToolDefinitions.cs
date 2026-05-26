@@ -305,6 +305,11 @@ namespace TSMapEditor.AI
                 ["y_pct"] = PropInt("Y百分比", 0, 100),
                 ["amount"] = PropEnum("矿石数量", new[] { "small", "medium", "large" }),
                 ["type"] = PropEnum("矿石类型", new[] { "ore", "gems" }),
+                ["include_mine"] = new Dictionary<string, object>
+                {
+                    ["type"] = "boolean",
+                    ["description"] = "是否同时放置矿井(TIBTRE01/TIBTRE02)作为矿石再生点。默认true；纯装饰矿石设为false。"
+                },
                 ["coordinate_scope"] = PropCoordinateScope(),
             }, required: new[] { "amount" })
         };

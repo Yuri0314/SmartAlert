@@ -950,24 +950,35 @@ namespace TSMapEditor.AI
                 pos.X, pos.Y, radius, 0.7f, $"放置{type}矿");
             mutationManager.PerformMutation(mutation);
 
+            // Read optional include_mine parameter (default: true for backward compatibility)
+            bool includeMine = true;
+            if (args.TryGetProperty("include_mine", out JsonElement includeMineElement) &&
+                (includeMineElement.ValueKind == JsonValueKind.True || includeMineElement.ValueKind == JsonValueKind.False))
+            {
+                includeMine = includeMineElement.GetBoolean();
+            }
+
             // Auto-place an Ore Mine drill (TIBTRE01) at the center of the ore field
             // TIBTRE01 is a terrain object that continuously regenerates ore for players to harvest
             // Used 6258 times across 720 official MO maps
             string minePlaced = "";
-            var oreMineType = map.Rules.TerrainTypes.Find(t =>
-                t.ININame.Equals("TIBTRE01", StringComparison.OrdinalIgnoreCase)) ??
-                map.Rules.TerrainTypes.Find(t =>
-                t.ININame.Equals("TIBTRE02", StringComparison.OrdinalIgnoreCase));
-            if (oreMineType != null)
+            if (includeMine)
             {
-                var cell = map.GetTile(pos.X, pos.Y);
-                if (cell != null && cell.TerrainObject == null)
+                var oreMineType = map.Rules.TerrainTypes.Find(t =>
+                    t.ININame.Equals("TIBTRE01", StringComparison.OrdinalIgnoreCase)) ??
+                    map.Rules.TerrainTypes.Find(t =>
+                    t.ININame.Equals("TIBTRE02", StringComparison.OrdinalIgnoreCase));
+                if (oreMineType != null)
                 {
-                    var mineMutation = new AIPlaceTerrainObjectMutation(mutationTarget,
-                        new List<TerrainType> { oreMineType },
-                        pos.X, pos.Y, 0, 1.0f, "放置矿井");
-                    mutationManager.PerformMutation(mineMutation);
-                    minePlaced = " + 生矿机";
+                    var cell = map.GetTile(pos.X, pos.Y);
+                    if (cell != null && cell.TerrainObject == null)
+                    {
+                        var mineMutation = new AIPlaceTerrainObjectMutation(mutationTarget,
+                            new List<TerrainType> { oreMineType },
+                            pos.X, pos.Y, 0, 1.0f, "放置矿井");
+                        mutationManager.PerformMutation(mineMutation);
+                        minePlaced = " + 生矿机";
+                    }
                 }
             }
 

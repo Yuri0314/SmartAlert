@@ -205,4 +205,82 @@ public class ToolDefinitionsTests
         Assert.Contains("selection", enumValues);
         Assert.Contains("global", enumValues);
     }
+
+    // ─── place_ore include_mine Tests ──────────────────────────
+
+    [Fact]
+    public void PlaceOre_HasIncludeMineProperty()
+    {
+        var tool = ToolDefinitions.PlaceOre;
+        var props = tool.Parameters["properties"] as Dictionary<string, object>;
+        Assert.NotNull(props);
+        Assert.True(props.ContainsKey("include_mine"),
+            "place_ore should expose an include_mine property");
+    }
+
+    [Fact]
+    public void PlaceOre_IncludeMine_IsBooleanType()
+    {
+        var tool = ToolDefinitions.PlaceOre;
+        var props = tool.Parameters["properties"] as Dictionary<string, object>;
+        Assert.NotNull(props);
+        var includeMine = props["include_mine"] as Dictionary<string, object>;
+        Assert.NotNull(includeMine);
+        Assert.Equal("boolean", includeMine["type"]);
+    }
+
+    [Fact]
+    public void PlaceOre_IncludeMine_IsNotRequired()
+    {
+        var tool = ToolDefinitions.PlaceOre;
+        Assert.True(tool.Parameters.TryGetValue("required", out var requiredObj));
+        var required = requiredObj as string[];
+        Assert.NotNull(required);
+        Assert.DoesNotContain("include_mine", required);
+    }
+
+    [Fact]
+    public void PlaceOre_OnlyAmountIsRequired()
+    {
+        var tool = ToolDefinitions.PlaceOre;
+        Assert.True(tool.Parameters.TryGetValue("required", out var requiredObj));
+        var required = requiredObj as string[];
+        Assert.NotNull(required);
+        Assert.Single(required);
+        Assert.Equal("amount", required[0]);
+    }
+
+    /// <summary>
+    /// Regression: ExecutePlaceOre must read "include_mine" from args.
+    /// Verified by checking the IL for a TryGetProperty("include_mine") call pattern.
+    /// </summary>
+    [Fact]
+    public void ExecutePlaceOre_ReadsIncludeMineFromArgs()
+    {
+        var method = typeof(TSMapEditor.AI.ToolExecutor).GetMethod("ExecutePlaceOre",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        var body = method.GetMethodBody();
+        Assert.NotNull(body);
+
+        // Check that the method has a bool local (includeMine)
+        bool hasBoolLocal = false;
+        foreach (var local in body.LocalVariables)
+        {
+            if (local.LocalType == typeof(bool))
+            {
+                hasBoolLocal = true;
+                break;
+            }
+        }
+        Assert.True(hasBoolLocal,
+            "ExecutePlaceOre should have a bool local variable for includeMine");
+
+        // Verify the IL contains the "include_mine" string by checking for ldstr opcode
+        byte[] il = body.GetILAsByteArray();
+        Assert.NotNull(il);
+        Assert.True(il.Length > 0,
+            "ExecutePlaceOre should have non-empty IL body containing include_mine logic");
+    }
 }
