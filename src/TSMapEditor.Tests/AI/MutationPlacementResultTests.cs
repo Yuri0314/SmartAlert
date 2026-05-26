@@ -392,5 +392,244 @@ namespace TSMapEditor.Tests.AI
         }
 
         #endregion
+
+        #region AI Cross-Type Occupancy Guard Tests
+
+        [Fact]
+        public void IsCellFreeOfTechno_ReturnsFalse_WhenCellIsNull()
+        {
+            Assert.False(AIPlaceObjectMutation.IsCellFreeOfTechno(null));
+        }
+
+        [Fact]
+        public void IsCellFreeOfTechno_ReturnsTrue_WhenCellIsEmpty()
+        {
+            var cell = new MapTile();
+            Assert.True(AIPlaceObjectMutation.IsCellFreeOfTechno(cell));
+        }
+
+        [Fact]
+        public void IsCellFreeOfTechno_ReturnsFalse_WhenCellHasStructure()
+        {
+            var cell = new MapTile();
+            cell.Structures.Add(CreateDummyStructure());
+            Assert.False(AIPlaceObjectMutation.IsCellFreeOfTechno(cell));
+        }
+
+        [Fact]
+        public void IsCellFreeOfTechno_ReturnsFalse_WhenCellHasVehicle()
+        {
+            var cell = new MapTile();
+            cell.Vehicles.Add(CreateDummyUnit());
+            Assert.False(AIPlaceObjectMutation.IsCellFreeOfTechno(cell));
+        }
+
+        [Fact]
+        public void IsCellFreeOfTechno_ReturnsFalse_WhenCellHasInfantry()
+        {
+            var cell = new MapTile();
+            var infantry = CreateDummyInfantry();
+            infantry.SubCell = SubCell.Bottom;
+            cell.Infantry[(int)SubCell.Bottom] = infantry;
+            Assert.False(AIPlaceObjectMutation.IsCellFreeOfTechno(cell));
+        }
+
+        [Fact]
+        public void CanPlaceInfantryOnCell_ReturnsFalse_WhenCellHasStructure()
+        {
+            var cell = new MapTile();
+            cell.Structures.Add(CreateDummyStructure());
+            Assert.False(AIPlaceObjectMutation.CanPlaceInfantryOnCell(cell));
+        }
+
+        [Fact]
+        public void CanPlaceInfantryOnCell_ReturnsFalse_WhenCellHasVehicle()
+        {
+            var cell = new MapTile();
+            cell.Vehicles.Add(CreateDummyUnit());
+            Assert.False(AIPlaceObjectMutation.CanPlaceInfantryOnCell(cell));
+        }
+
+        [Fact]
+        public void CanPlaceInfantryOnCell_ReturnsTrue_WhenCellHasInfantryButFreeSubcell()
+        {
+            var cell = new MapTile();
+            var infantry = CreateDummyInfantry();
+            infantry.SubCell = SubCell.Bottom;
+            cell.Infantry[(int)SubCell.Bottom] = infantry;
+            // Left and Right subcells are still free
+            Assert.True(AIPlaceObjectMutation.CanPlaceInfantryOnCell(cell));
+        }
+
+        [Fact]
+        public void CanPlaceInfantryOnCell_ReturnsFalse_WhenAllSubcellsOccupied()
+        {
+            var cell = new MapTile();
+            cell.Infantry[(int)SubCell.Bottom] = CreateDummyInfantry();
+            cell.Infantry[(int)SubCell.Left] = CreateDummyInfantry();
+            cell.Infantry[(int)SubCell.Right] = CreateDummyInfantry();
+            Assert.False(AIPlaceObjectMutation.CanPlaceInfantryOnCell(cell));
+        }
+
+        [Fact]
+        public void CanPlaceInfantryOnCell_ReturnsFalse_WhenCellIsNull()
+        {
+            Assert.False(AIPlaceObjectMutation.CanPlaceInfantryOnCell(null));
+        }
+
+        [Fact]
+        public void CanPlaceInfantryOnCell_ReturnsTrue_WhenCellIsEmpty()
+        {
+            var cell = new MapTile();
+            Assert.True(AIPlaceObjectMutation.CanPlaceInfantryOnCell(cell));
+        }
+
+        [Fact]
+        public void IsCellFreeOfTechno_ReturnsFalse_WhenCellHasAircraft()
+        {
+            var cell = new MapTile();
+            cell.Aircraft.Add(CreateDummyAircraft());
+            Assert.False(AIPlaceObjectMutation.IsCellFreeOfTechno(cell));
+        }
+
+        [Fact]
+        public void CanPlaceInfantryOnCell_ReturnsFalse_WhenCellHasAircraft()
+        {
+            var cell = new MapTile();
+            cell.Aircraft.Add(CreateDummyAircraft());
+            Assert.False(AIPlaceObjectMutation.CanPlaceInfantryOnCell(cell));
+        }
+
+        /// <summary>
+        /// Verify that the building validation method exists and checks cross-type techno.
+        /// We test this via IL inspection: IsValidBuildingPosition uses a lambda
+        /// inside DoForFoundationCoordsOrOrigin that calls HasInfantry(). The compiler
+        /// generates a closure class for this, so we search nested types for the token.
+        /// </summary>
+        [Fact]
+        public void IsValidBuildingPosition_ChecksCrossTypeTechno()
+        {
+            // The method itself must exist
+            var method = typeof(AIPlaceObjectMutation).GetMethod("IsValidBuildingPosition",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(method);
+
+            // HasInfantry is called inside a lambda closure, so find it in nested types
+            var hasInfantryMethod = typeof(MapTile).GetMethod("HasInfantry",
+                BindingFlags.Public | BindingFlags.Instance);
+            Assert.NotNull(hasInfantryMethod);
+
+            int token = hasInfantryMethod.MetadataToken;
+            byte[] tokenBytes = BitConverter.GetBytes(token);
+
+            bool found = false;
+
+            // Search the outer method IL first
+            found = SearchILForToken(method.GetMethodBody()?.GetILAsByteArray(), tokenBytes);
+
+            // If not found, search compiler-generated nested types (closure classes)
+            if (!found)
+            {
+                var nestedTypes = typeof(AIPlaceObjectMutation).GetNestedTypes(
+                    BindingFlags.NonPublic | BindingFlags.Public);
+                foreach (var nestedType in nestedTypes)
+                {
+                    foreach (var nestedMethod in nestedType.GetMethods(
+                        BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+                    {
+                        var body = nestedMethod.GetMethodBody();
+                        if (body != null && SearchILForToken(body.GetILAsByteArray(), tokenBytes))
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+            }
+
+            Assert.True(found,
+                "IsValidBuildingPosition (or its lambda closure) should call HasInfantry() " +
+                "as part of cross-type occupancy guard");
+        }
+
+        private static bool SearchILForToken(byte[] il, byte[] tokenBytes)
+        {
+            if (il == null || il.Length < 5)
+                return false;
+            for (int i = 0; i < il.Length - 4; i++)
+            {
+                if ((il[i] == 0x28 || il[i] == 0x6F) &&
+                    il[i + 1] == tokenBytes[0] && il[i + 2] == tokenBytes[1] &&
+                    il[i + 3] == tokenBytes[2] && il[i + 4] == tokenBytes[3])
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Verify FindValidPlacementPositionSimple calls IsCellFreeOfTechno
+        /// to enforce cross-type occupancy guard for vehicles.
+        /// </summary>
+        [Fact]
+        public void FindValidPlacementPositionSimple_CallsIsCellFreeOfTechno()
+        {
+            var method = typeof(AIPlaceObjectMutation).GetMethod("FindValidPlacementPositionSimple",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(method);
+
+            var body = method.GetMethodBody();
+            Assert.NotNull(body);
+            byte[] il = body.GetILAsByteArray();
+            Assert.NotNull(il);
+
+            var guardMethod = typeof(AIPlaceObjectMutation).GetMethod("IsCellFreeOfTechno",
+                BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Public);
+            Assert.NotNull(guardMethod);
+
+            int token = guardMethod.MetadataToken;
+            byte[] tokenBytes = BitConverter.GetBytes(token);
+
+            bool found = false;
+            for (int i = 0; i < il.Length - 4; i++)
+            {
+                if ((il[i] == 0x28 || il[i] == 0x6F) &&
+                    il[i + 1] == tokenBytes[0] && il[i + 2] == tokenBytes[1] &&
+                    il[i + 3] == tokenBytes[2] && il[i + 4] == tokenBytes[3])
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            Assert.True(found,
+                "FindValidPlacementPositionSimple should call IsCellFreeOfTechno for cross-type guard");
+        }
+
+        // ─── Dummy Object Helpers ───────────────────────────────────
+
+        private static Structure CreateDummyStructure()
+        {
+            return (Structure)RuntimeHelpers.GetUninitializedObject(typeof(Structure));
+        }
+
+        private static Unit CreateDummyUnit()
+        {
+            return (Unit)RuntimeHelpers.GetUninitializedObject(typeof(Unit));
+        }
+
+        private static Infantry CreateDummyInfantry()
+        {
+            return (Infantry)RuntimeHelpers.GetUninitializedObject(typeof(Infantry));
+        }
+
+        private static Aircraft CreateDummyAircraft()
+        {
+            return (Aircraft)RuntimeHelpers.GetUninitializedObject(typeof(Aircraft));
+        }
+
+        #endregion
     }
 }

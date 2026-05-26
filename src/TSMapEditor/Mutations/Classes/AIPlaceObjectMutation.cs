@@ -134,8 +134,9 @@ namespace TSMapEditor.Mutations.Classes
             unit.Owner = owner;
             unit.Position = pos;
 
-            // Check placement validity
-            if (!map.CanPlaceObjectAt(unit, pos, false, false))
+            // Check placement validity: WAE same-type check + AI cross-type guard
+            var cell = map.GetTile(pos);
+            if (!map.CanPlaceObjectAt(unit, pos, false, false) || !IsCellFreeOfTechno(cell))
             {
                 Point2D? validPos = FindValidPlacementPositionSimple(map, unit, pos);
                 if (validPos == null)
@@ -158,19 +159,24 @@ namespace TSMapEditor.Mutations.Classes
             if (cell == null)
                 return;
 
-            SubCell freeSpot = cell.GetFreeSubCellSpot();
-            if (freeSpot == SubCell.None)
+            // AI cross-type guard: infantry should not be placed on cells with
+            // buildings, vehicles, or aircraft. Infantry-infantry sharing is allowed
+            // as long as a free subcell exists.
+            if (!CanPlaceInfantryOnCell(cell))
             {
                 // Try nearby cells
-                Point2D? nearby = FindCellWithFreeSubCell(map, pos);
+                Point2D? nearby = FindCellWithFreeInfantrySlot(map, pos);
                 if (nearby == null)
                     return;
                 pos = nearby.Value;
                 cell = map.GetTile(pos);
-                freeSpot = cell.GetFreeSubCellSpot();
-                if (freeSpot == SubCell.None)
+                if (!CanPlaceInfantryOnCell(cell))
                     return;
             }
+
+            SubCell freeSpot = cell.GetFreeSubCellSpot();
+            if (freeSpot == SubCell.None)
+                return;
 
             var infantry = new Infantry(infantryType);
             infantry.Owner = owner;
@@ -180,9 +186,50 @@ namespace TSMapEditor.Mutations.Classes
             placedInfantry.Add(infantry);
         }
 
+        // ─── AI Cross-Type Occupancy Guards ─────────────────────────
+
+        /// <summary>
+        /// Returns true if the cell has no techno objects (buildings, vehicles,
+        /// aircraft, or infantry). Used as an AI safety guard to prevent
+        /// cross-type overlap during AI-driven placement.
+        /// Does NOT block placement due to overlays, smudges, waypoints,
+        /// terrain objects, or cell tags.
+        /// </summary>
+        internal static bool IsCellFreeOfTechno(MapTile cell)
+        {
+            if (cell == null)
+                return false;
+
+            return !cell.HasTechno();
+        }
+
+        /// <summary>
+        /// Returns true if an infantry unit can be placed on the cell.
+        /// Allows infantry-infantry sharing (multiple infantry per cell via subcells)
+        /// but blocks placement on cells with buildings, vehicles, or aircraft.
+        /// </summary>
+        internal static bool CanPlaceInfantryOnCell(MapTile cell)
+        {
+            if (cell == null)
+                return false;
+
+            // Block if cell has any non-infantry techno
+            if (cell.Structures.Count > 0 ||
+                cell.Vehicles.Count > 0 ||
+                cell.Aircraft.Count > 0)
+            {
+                return false;
+            }
+
+            // Allow if there's a free infantry subcell
+            return cell.GetFreeSubCellSpot() != SubCell.None;
+        }
+
+        // ─── Position Search Helpers ────────────────────────────────
+
         /// <summary>
         /// Searches for a valid placement position for a building, spiraling outward from the target.
-        /// Checks both occupancy (CanPlaceObjectAt) AND terrain height uniformity across foundation.
+        /// Checks WAE occupancy, AI cross-type techno guard, AND terrain height uniformity across foundation.
         /// </summary>
         private Point2D? FindValidPlacementPosition(Map map, Structure structure, Point2D target)
         {
@@ -215,6 +262,7 @@ namespace TSMapEditor.Mutations.Classes
         /// 1. All foundation cells must exist on the map
         /// 2. All foundation cells must be at the same height level (no cliff spanning)
         /// 3. No overlap with existing buildings (CanPlaceObjectAt)
+        /// 4. No cross-type techno overlap on any foundation cell (AI guard)
         /// </summary>
         private bool IsValidBuildingPosition(Map map, Structure structure, Point2D pos)
         {
@@ -228,30 +276,40 @@ namespace TSMapEditor.Mutations.Classes
             if (!map.CanPlaceObjectAt(structure, pos, false, false))
                 return false;
 
-            // Check height uniformity across all foundation cells
+            // Check height uniformity and cross-type techno guard across all foundation cells
             byte baseHeight = cell.Level;
-            bool heightUniform = true;
+            bool valid = true;
 
             structure.ObjectType.ArtConfig.DoForFoundationCoordsOrOrigin(offset =>
             {
                 var foundationCell = map.GetTile(pos + offset);
                 if (foundationCell == null)
                 {
-                    heightUniform = false;
+                    valid = false;
                     return;
                 }
 
                 if (foundationCell.Level != baseHeight)
                 {
-                    heightUniform = false;
+                    valid = false;
+                    return;
+                }
+
+                // AI cross-type guard: reject if any foundation cell has vehicles, aircraft, or infantry
+                if (foundationCell.Vehicles.Count > 0 ||
+                    foundationCell.Aircraft.Count > 0 ||
+                    foundationCell.HasInfantry())
+                {
+                    valid = false;
                 }
             });
 
-            return heightUniform;
+            return valid;
         }
 
         /// <summary>
         /// Searches for a valid placement position for a unit/aircraft.
+        /// Checks both WAE same-type validation and AI cross-type techno guard.
         /// </summary>
         private Point2D? FindValidPlacementPositionSimple(Map map, IMovable movable, Point2D target)
         {
@@ -265,8 +323,10 @@ namespace TSMapEditor.Mutations.Classes
                             continue;
 
                         var candidate = new Point2D(target.X + dx, target.Y + dy);
-                        if (map.GetTile(candidate) != null &&
-                            map.CanPlaceObjectAt(movable, candidate, false, false))
+                        var candidateCell = map.GetTile(candidate);
+                        if (candidateCell != null &&
+                            map.CanPlaceObjectAt(movable, candidate, false, false) &&
+                            IsCellFreeOfTechno(candidateCell))
                         {
                             return candidate;
                         }
@@ -278,9 +338,10 @@ namespace TSMapEditor.Mutations.Classes
         }
 
         /// <summary>
-        /// Finds a nearby cell that has a free sub-cell slot for infantry.
+        /// Finds a nearby cell that is free of non-infantry techno and has a free
+        /// sub-cell slot for infantry placement.
         /// </summary>
-        private Point2D? FindCellWithFreeSubCell(Map map, Point2D target)
+        private Point2D? FindCellWithFreeInfantrySlot(Map map, Point2D target)
         {
             for (int radius = 1; radius <= 5; radius++)
             {
@@ -293,7 +354,7 @@ namespace TSMapEditor.Mutations.Classes
 
                         var candidate = new Point2D(target.X + dx, target.Y + dy);
                         var cell = map.GetTile(candidate);
-                        if (cell != null && cell.GetFreeSubCellSpot() != SubCell.None)
+                        if (cell != null && CanPlaceInfantryOnCell(cell))
                             return candidate;
                     }
                 }
