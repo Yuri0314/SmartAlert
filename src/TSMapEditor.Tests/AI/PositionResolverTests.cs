@@ -21,6 +21,19 @@ namespace TSMapEditor.Tests.AI
 
         private static PositionResolver CreateResolver() => new PositionResolver(CreateTestMap());
 
+        /// <summary>
+        /// Screen horizontal coordinate (proportional to cellX - cellY).
+        /// Positive = screen-right, negative = screen-left.
+        /// </summary>
+        private static int ScreenX(Point2D point) => point.X - point.Y;
+
+        /// <summary>
+        /// Screen vertical coordinate relative to center (proportional to cellX + cellY).
+        /// Positive = screen-down, negative = screen-up.
+        /// </summary>
+        private static int ScreenY(PositionResolver resolver, Point2D point)
+            => point.X + point.Y - (resolver.Center * 2);
+
         // ─── Full-map Resolve baseline ─────────────────────────────
 
         [Fact]
@@ -33,7 +46,128 @@ namespace TSMapEditor.Tests.AI
             Assert.Equal(resolver.Center, pos.Y);
         }
 
-        // ─── ResolveWithinSelection tests ──────────────────────────
+        // ─── Screen-space cardinal direction tests ─────────────────
+
+        [Fact]
+        public void Resolve_SemanticCardinalDirectionsUseScreenSpaceAxes()
+        {
+            var resolver = CreateResolver();
+            int tolerance = 2; // allow small integer truncation errors
+
+            var center = resolver.Resolve("center");
+            Assert.Equal(0, ScreenX(center));
+            Assert.Equal(0, ScreenY(resolver, center));
+
+            var north = resolver.Resolve("north");
+            Assert.True(System.Math.Abs(ScreenX(north)) <= tolerance,
+                $"north ScreenX should be ~0, got {ScreenX(north)}");
+            Assert.True(ScreenY(resolver, north) < 0,
+                $"north ScreenY should be < 0, got {ScreenY(resolver, north)}");
+
+            var south = resolver.Resolve("south");
+            Assert.True(System.Math.Abs(ScreenX(south)) <= tolerance,
+                $"south ScreenX should be ~0, got {ScreenX(south)}");
+            Assert.True(ScreenY(resolver, south) > 0,
+                $"south ScreenY should be > 0, got {ScreenY(resolver, south)}");
+
+            var east = resolver.Resolve("east");
+            Assert.True(ScreenX(east) > 0,
+                $"east ScreenX should be > 0, got {ScreenX(east)}");
+            Assert.True(System.Math.Abs(ScreenY(resolver, east)) <= tolerance,
+                $"east ScreenY should be ~0, got {ScreenY(resolver, east)}");
+
+            var west = resolver.Resolve("west");
+            Assert.True(ScreenX(west) < 0,
+                $"west ScreenX should be < 0, got {ScreenX(west)}");
+            Assert.True(System.Math.Abs(ScreenY(resolver, west)) <= tolerance,
+                $"west ScreenY should be ~0, got {ScreenY(resolver, west)}");
+        }
+
+        // ─── Screen-space diagonal direction tests ─────────────────
+
+        [Fact]
+        public void Resolve_SemanticDiagonalDirectionsUseScreenSpaceQuadrants()
+        {
+            var resolver = CreateResolver();
+
+            var nw = resolver.Resolve("northwest");
+            Assert.True(ScreenX(nw) < 0, $"northwest ScreenX should be < 0, got {ScreenX(nw)}");
+            Assert.True(ScreenY(resolver, nw) < 0, $"northwest ScreenY should be < 0, got {ScreenY(resolver, nw)}");
+
+            var ne = resolver.Resolve("northeast");
+            Assert.True(ScreenX(ne) > 0, $"northeast ScreenX should be > 0, got {ScreenX(ne)}");
+            Assert.True(ScreenY(resolver, ne) < 0, $"northeast ScreenY should be < 0, got {ScreenY(resolver, ne)}");
+
+            var sw = resolver.Resolve("southwest");
+            Assert.True(ScreenX(sw) < 0, $"southwest ScreenX should be < 0, got {ScreenX(sw)}");
+            Assert.True(ScreenY(resolver, sw) > 0, $"southwest ScreenY should be > 0, got {ScreenY(resolver, sw)}");
+
+            var se = resolver.Resolve("southeast");
+            Assert.True(ScreenX(se) > 0, $"southeast ScreenX should be > 0, got {ScreenX(se)}");
+            Assert.True(ScreenY(resolver, se) > 0, $"southeast ScreenY should be > 0, got {ScreenY(resolver, se)}");
+        }
+
+        // ─── Percentage corner tests ───────────────────────────────
+
+        [Fact]
+        public void Resolve_PercentageCornersUseScreenSpaceQuadrants()
+        {
+            var resolver = CreateResolver();
+
+            // (15,15) → screen top-left
+            var topLeft = resolver.Resolve(null, 15, 15);
+            Assert.True(ScreenX(topLeft) < 0, $"(15,15) ScreenX should be < 0, got {ScreenX(topLeft)}");
+            Assert.True(ScreenY(resolver, topLeft) < 0, $"(15,15) ScreenY should be < 0, got {ScreenY(resolver, topLeft)}");
+
+            // (85,15) → screen top-right
+            var topRight = resolver.Resolve(null, 85, 15);
+            Assert.True(ScreenX(topRight) > 0, $"(85,15) ScreenX should be > 0, got {ScreenX(topRight)}");
+            Assert.True(ScreenY(resolver, topRight) < 0, $"(85,15) ScreenY should be < 0, got {ScreenY(resolver, topRight)}");
+
+            // (15,85) → screen bottom-left
+            var bottomLeft = resolver.Resolve(null, 15, 85);
+            Assert.True(ScreenX(bottomLeft) < 0, $"(15,85) ScreenX should be < 0, got {ScreenX(bottomLeft)}");
+            Assert.True(ScreenY(resolver, bottomLeft) > 0, $"(15,85) ScreenY should be > 0, got {ScreenY(resolver, bottomLeft)}");
+
+            // (85,85) → screen bottom-right
+            var bottomRight = resolver.Resolve(null, 85, 85);
+            Assert.True(ScreenX(bottomRight) > 0, $"(85,85) ScreenX should be > 0, got {ScreenX(bottomRight)}");
+            Assert.True(ScreenY(resolver, bottomRight) > 0, $"(85,85) ScreenY should be > 0, got {ScreenY(resolver, bottomRight)}");
+        }
+
+        // ─── Alias tests ───────────────────────────────────────────
+
+        [Fact]
+        public void Resolve_AliasesMatchCorrespondingSemanticPositions()
+        {
+            var resolver = CreateResolver();
+
+            // top_left == northwest
+            var nw = resolver.Resolve("northwest");
+            var tl = resolver.Resolve("top_left");
+            Assert.Equal(nw.X, tl.X);
+            Assert.Equal(nw.Y, tl.Y);
+
+            // top_right == northeast
+            var ne = resolver.Resolve("northeast");
+            var tr = resolver.Resolve("top_right");
+            Assert.Equal(ne.X, tr.X);
+            Assert.Equal(ne.Y, tr.Y);
+
+            // bottom_left == southwest
+            var sw = resolver.Resolve("southwest");
+            var bl = resolver.Resolve("bottom_left");
+            Assert.Equal(sw.X, bl.X);
+            Assert.Equal(sw.Y, bl.Y);
+
+            // bottom_right == southeast
+            var se = resolver.Resolve("southeast");
+            var br = resolver.Resolve("bottom_right");
+            Assert.Equal(se.X, br.X);
+            Assert.Equal(se.Y, br.Y);
+        }
+
+        // ─── ResolveWithinSelection tests (unchanged) ──────────────
 
         [Fact]
         public void ResolveWithinSelection_CenterReturnsSelectionCenter()

@@ -85,10 +85,18 @@ namespace TSMapEditor.AI
         /// <summary>
         /// Converts percentage coordinates (0-100) to isometric cell coordinates.
         /// 0% = diamond edge (min), 50% = center, 100% = diamond edge (max).
-        /// 
-        /// For the user and AI, the percentage axes map to screen directions:
+        ///
+        /// The percentage axes map to user-facing screen directions:
         /// - X: 0% = screen-left, 100% = screen-right
         /// - Y: 0% = screen-top, 100% = screen-bottom
+        ///
+        /// The isometric screen projection is approximately:
+        ///   screenX ∝ cellX - cellY   (screen horizontal)
+        ///   screenY ∝ cellX + cellY   (screen vertical)
+        ///
+        /// This method converts screen-space offsets back to iso cell offsets:
+        ///   cellX offset = (screenXOffset + screenYOffset) / 2
+        ///   cellY offset = (screenYOffset - screenXOffset) / 2
         /// </summary>
         private Point2D ResolvePercentage(int xPct, int yPct)
         {
@@ -99,16 +107,17 @@ namespace TSMapEditor.AI
             int center = Center;
             int radius = DiamondRadius;
 
-            // Map percentage to offset from center
+            // Map percentage to screen-space offset from center
             // 50% → 0 offset, 0% → -radius, 100% → +radius
             // Use 85% of radius to keep things safely inside the diamond
             int safeRadius = (int)(radius * 0.85);
 
-            double xOffset = (xPct - 50.0) / 50.0 * safeRadius;
-            double yOffset = (yPct - 50.0) / 50.0 * safeRadius;
+            double screenXOffset = (xPct - 50.0) / 50.0 * safeRadius;
+            double screenYOffset = (yPct - 50.0) / 50.0 * safeRadius;
 
-            int x = center + (int)xOffset;
-            int y = center + (int)yOffset;
+            // Convert screen-space offsets to isometric cell offsets
+            int x = center + (int)((screenXOffset + screenYOffset) / 2.0);
+            int y = center + (int)((screenYOffset - screenXOffset) / 2.0);
 
             return new Point2D(x, y);
         }
