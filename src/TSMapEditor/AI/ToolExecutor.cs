@@ -377,7 +377,7 @@ namespace TSMapEditor.AI
                    $"等距中心: ({positionResolver.Center},{positionResolver.Center})\n" +
                    $"菱形半径: {positionResolver.DiamondRadius}\n" +
                    $"当前出生点数量: {spawnCount}\n" +
-                   $"可用所属方: {string.Join(", ", houses.Select(h => h.ININame))}\n" +
+                   $"所属方: {houses.Count} 个可用；需要选择 owner 时请调用 get_houses 查看按阵营分组的精确 ININame\n" +
                    $"可用地面类型: {string.Join(", ", latNames)}\n" +
                    $"可用地块集(地形装饰): {string.Join(", ", placeableSets.Take(25))}\n" +
                    $"可用地物类型(示例): {string.Join(", ", terrainTypes)}\n" +
