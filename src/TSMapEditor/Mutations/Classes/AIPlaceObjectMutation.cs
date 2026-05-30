@@ -134,9 +134,11 @@ namespace TSMapEditor.Mutations.Classes
             unit.Owner = owner;
             unit.Position = pos;
 
-            // Check placement validity: WAE same-type check + AI cross-type guard
+            // Check placement validity: WAE same-type check + AI cross-type guard + terrain legality
             var cell = map.GetTile(pos);
-            if (!map.CanPlaceObjectAt(unit, pos, false, false) || !IsCellFreeOfTechno(cell))
+            if (!map.CanPlaceObjectAt(unit, pos, false, false) ||
+                !IsCellFreeOfTechno(cell) ||
+                !AIPlacementTerrainRules.IsValidGroundCell(map, cell, requireFlat: false))
             {
                 Point2D? validPos = FindValidPlacementPositionSimple(map, unit, pos);
                 if (validPos == null)
@@ -159,10 +161,11 @@ namespace TSMapEditor.Mutations.Classes
             if (cell == null)
                 return;
 
-            // AI cross-type guard: infantry should not be placed on cells with
-            // buildings, vehicles, or aircraft. Infantry-infantry sharing is allowed
-            // as long as a free subcell exists.
-            if (!CanPlaceInfantryOnCell(cell))
+            // AI cross-type guard + terrain legality: infantry should not be placed on cells with
+            // buildings, vehicles, or aircraft, or on invalid terrain (water, rock, ice, beach).
+            // Infantry-infantry sharing is allowed as long as a free subcell exists.
+            if (!CanPlaceInfantryOnCell(cell) ||
+                !AIPlacementTerrainRules.IsValidGroundCell(map, cell, requireFlat: false))
             {
                 // Try nearby cells
                 Point2D? nearby = FindCellWithFreeInfantrySlot(map, pos);
@@ -276,6 +279,10 @@ namespace TSMapEditor.Mutations.Classes
             if (!map.CanPlaceObjectAt(structure, pos, false, false))
                 return false;
 
+            // Check terrain legality across all foundation cells (water, rock, ramps)
+            if (!AIPlacementTerrainRules.IsValidBuildingGround(map, structure))
+                return false;
+
             // Check height uniformity and cross-type techno guard across all foundation cells
             byte baseHeight = cell.Level;
             bool valid = true;
@@ -295,10 +302,11 @@ namespace TSMapEditor.Mutations.Classes
                     return;
                 }
 
-                // AI cross-type guard: reject if any foundation cell has vehicles, aircraft, or infantry
+                // AI cross-type guard: reject if any foundation cell has vehicles, aircraft, infantry, or terrain objects (trees/rocks)
                 if (foundationCell.Vehicles.Count > 0 ||
                     foundationCell.Aircraft.Count > 0 ||
-                    foundationCell.HasInfantry())
+                    foundationCell.HasInfantry() ||
+                    foundationCell.TerrainObject != null)
                 {
                     valid = false;
                 }
@@ -326,7 +334,8 @@ namespace TSMapEditor.Mutations.Classes
                         var candidateCell = map.GetTile(candidate);
                         if (candidateCell != null &&
                             map.CanPlaceObjectAt(movable, candidate, false, false) &&
-                            IsCellFreeOfTechno(candidateCell))
+                            IsCellFreeOfTechno(candidateCell) &&
+                            AIPlacementTerrainRules.IsValidGroundCell(map, candidateCell, requireFlat: false))
                         {
                             return candidate;
                         }
@@ -354,7 +363,8 @@ namespace TSMapEditor.Mutations.Classes
 
                         var candidate = new Point2D(target.X + dx, target.Y + dy);
                         var cell = map.GetTile(candidate);
-                        if (cell != null && CanPlaceInfantryOnCell(cell))
+                        if (cell != null && CanPlaceInfantryOnCell(cell) &&
+                            AIPlacementTerrainRules.IsValidGroundCell(map, cell, requireFlat: false))
                             return candidate;
                     }
                 }

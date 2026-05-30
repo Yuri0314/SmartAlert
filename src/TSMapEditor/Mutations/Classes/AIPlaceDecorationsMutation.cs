@@ -87,7 +87,12 @@ namespace TSMapEditor.Mutations.Classes
 
                     var cell = map.GetTile(x, y);
                     if (cell == null || cell.TerrainObject != null ||
-                        cell.Structures.Count > 0 || cell.Vehicles.Count > 0)
+                        cell.Structures.Count > 0 || cell.Vehicles.Count > 0 ||
+                        cell.HasInfantry())
+                        continue;
+
+                    // Skip cells on invalid terrain (water, rock, ramps)
+                    if (!AIPlacementTerrainRules.IsValidGroundCell(map, cell, requireFlat: true))
                         continue;
 
                     var chosenType = buildingTypes[random.Next(buildingTypes.Count)];

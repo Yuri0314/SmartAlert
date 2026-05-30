@@ -106,6 +106,10 @@ namespace TSMapEditor.Mutations.Classes
                     if (nearSpawn)
                         continue;
 
+                    // Skip cells on invalid terrain (water, rock, ramps)
+                    if (!AIPlacementTerrainRules.IsValidGroundCell(map, cell, requireFlat: true))
+                        continue;
+
                     // Skip cells that already have terrain objects (trees, rocks)
                     if (cell.TerrainObject != null)
                         continue;

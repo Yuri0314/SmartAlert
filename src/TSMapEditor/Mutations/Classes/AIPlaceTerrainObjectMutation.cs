@@ -105,6 +105,10 @@ namespace TSMapEditor.Mutations.Classes
                     if (cell.HasInfantry())
                         continue;
 
+                    // Skip cells on invalid terrain (water, rock, ramps)
+                    if (!AIPlacementTerrainRules.IsValidGroundCell(Map, cell, requireFlat: true))
+                        continue;
+
                     // Randomly pick a terrain type from the list
                     var chosenType = terrainTypes[random.Next(terrainTypes.Count)];
 
