@@ -356,5 +356,211 @@ namespace TSMapEditor.Tests.AI
                 }
             }
         }
+
+        // ─── V4 Task 3A: Expanded full-map coverage tests ──────────
+
+        [Fact]
+        public void Resolve_FullMapDiagonalAliasesUseExpandedPercentages()
+        {
+            var resolver = CreateResolver();
+
+            // northwest should now equal explicit (2,2) — Task 3D tuning
+            var nw = resolver.Resolve("northwest");
+            var explicit2 = resolver.Resolve(null, 2, 2);
+            Assert.Equal(explicit2.X, nw.X);
+            Assert.Equal(explicit2.Y, nw.Y);
+
+            // northeast == (98,2)
+            var ne = resolver.Resolve("northeast");
+            var explicit98_2 = resolver.Resolve(null, 98, 2);
+            Assert.Equal(explicit98_2.X, ne.X);
+            Assert.Equal(explicit98_2.Y, ne.Y);
+
+            // southwest == (2,98)
+            var sw = resolver.Resolve("southwest");
+            var explicit2_98 = resolver.Resolve(null, 2, 98);
+            Assert.Equal(explicit2_98.X, sw.X);
+            Assert.Equal(explicit2_98.Y, sw.Y);
+
+            // southeast == (98,98)
+            var se = resolver.Resolve("southeast");
+            var explicit98 = resolver.Resolve(null, 98, 98);
+            Assert.Equal(explicit98.X, se.X);
+            Assert.Equal(explicit98.Y, se.Y);
+
+            // Aliases match their direction names
+            var tl = resolver.Resolve("top_left");
+            Assert.Equal(nw.X, tl.X);
+            Assert.Equal(nw.Y, tl.Y);
+
+            var tr = resolver.Resolve("top_right");
+            Assert.Equal(ne.X, tr.X);
+            Assert.Equal(ne.Y, tr.Y);
+
+            var bl = resolver.Resolve("bottom_left");
+            Assert.Equal(sw.X, bl.X);
+            Assert.Equal(sw.Y, bl.Y);
+
+            var br = resolver.Resolve("bottom_right");
+            Assert.Equal(se.X, br.X);
+            Assert.Equal(se.Y, br.Y);
+        }
+
+        [Fact]
+        public void Resolve_FullMapCardinalAliasesUseExpandedPercentages()
+        {
+            var resolver = CreateResolver();
+
+            // north == (50, 5) — Task 3D tuning from 10→5
+            var north = resolver.Resolve("north");
+            var explicit50_5 = resolver.Resolve(null, 50, 5);
+            Assert.Equal(explicit50_5.X, north.X);
+            Assert.Equal(explicit50_5.Y, north.Y);
+
+            // south == (50, 95)
+            var south = resolver.Resolve("south");
+            var explicit50_95 = resolver.Resolve(null, 50, 95);
+            Assert.Equal(explicit50_95.X, south.X);
+            Assert.Equal(explicit50_95.Y, south.Y);
+
+            // east == (95, 50)
+            var east = resolver.Resolve("east");
+            var explicit95_50 = resolver.Resolve(null, 95, 50);
+            Assert.Equal(explicit95_50.X, east.X);
+            Assert.Equal(explicit95_50.Y, east.Y);
+
+            // west == (5, 50)
+            var west = resolver.Resolve("west");
+            var explicit5_50 = resolver.Resolve(null, 5, 50);
+            Assert.Equal(explicit5_50.X, west.X);
+            Assert.Equal(explicit5_50.Y, west.Y);
+
+            // Aliases match
+            var top = resolver.Resolve("top");
+            Assert.Equal(north.X, top.X);
+            Assert.Equal(north.Y, top.Y);
+
+            var bottom = resolver.Resolve("bottom");
+            Assert.Equal(south.X, bottom.X);
+            Assert.Equal(south.Y, bottom.Y);
+
+            var left = resolver.Resolve("left");
+            Assert.Equal(west.X, left.X);
+            Assert.Equal(west.Y, left.Y);
+
+            var right = resolver.Resolve("right");
+            Assert.Equal(east.X, right.X);
+            Assert.Equal(east.Y, right.Y);
+        }
+
+        [Fact]
+        public void Resolve_FullMapSafeRadiusUsesNinetyFivePercent()
+        {
+            // For 200x200 map: DiamondRadius=99, safeRadius=(int)(99*0.95)=94
+            var resolver = CreateResolver();
+            int center = resolver.Center;   // 199
+            int radius = resolver.DiamondRadius; // 99
+            int expectedSafeRadius = (int)(radius * 0.95); // 94
+
+            // (100,50) → screenXOffset = +safeRadius, screenYOffset = 0
+            // cellX = center + safeRadius/2, cellY = center - safeRadius/2
+            var eastEdge = resolver.Resolve(null, 100, 50);
+            int screenX = ScreenX(eastEdge); // cellX - cellY = safeRadius
+
+            // Allow ±2 for integer truncation + ClampToDiamond
+            Assert.True(System.Math.Abs(screenX - expectedSafeRadius) <= 2,
+                $"Expected ScreenX ≈ {expectedSafeRadius}, got {screenX}");
+        }
+
+        [Fact]
+        public void Resolve_ExtremePercentageStaysWithinDiamond()
+        {
+            var resolver = CreateResolver();
+            int center = resolver.Center;
+            int maxManhattan = resolver.DiamondRadius - 2; // ClampToDiamond limit
+
+            var corners = new[]
+            {
+                resolver.Resolve(null, 0, 0),
+                resolver.Resolve(null, 100, 100),
+                resolver.Resolve(null, 0, 100),
+                resolver.Resolve(null, 100, 0),
+            };
+
+            foreach (var pos in corners)
+            {
+                int manhattan = System.Math.Abs(pos.X - center) + System.Math.Abs(pos.Y - center);
+                Assert.True(manhattan <= maxManhattan,
+                    $"({pos.X},{pos.Y}) manhattan={manhattan} exceeds max={maxManhattan}");
+            }
+        }
+
+        [Fact]
+        public void Resolve_FullMapDiagonalDistanceIncreases()
+        {
+            // Task 3D: diagonal at (2,2) should reach at least manhattan 88 on 200x200
+            // Calculated: safeRadius=94, offset=(2-50)/50*94=-90.24, cellX=199+(-90+-90)/2=109
+            // manhattan = |109-199| = 90
+            var resolver = CreateResolver();
+            int center = resolver.Center;
+
+            var nw = resolver.Resolve("northwest");
+            int manhattan = System.Math.Abs(nw.X - center) + System.Math.Abs(nw.Y - center);
+
+            Assert.True(manhattan >= 88,
+                $"northwest manhattan distance should be >= 88 (Task 3D tuning), got {manhattan}");
+
+            // Also verify it's still safely inside the diamond
+            Assert.True(manhattan <= resolver.DiamondRadius - 2,
+                $"northwest should stay inside diamond, manhattan={manhattan}, limit={resolver.DiamondRadius - 2}");
+        }
+
+        [Fact]
+        public void ResolveWithinSelection_DiagonalSemanticsRemainUnchanged()
+        {
+            // Selection-scoped diagonals use ResolveToPercentages() which still has 15/85.
+            // This must NOT change even though full-map diagonals moved to 2/98.
+            var resolver = CreateResolver();
+            var selection = new AISelection(180, 180, 40, 40);
+
+            var nwSelection = resolver.ResolveWithinSelection(selection, "northwest");
+
+            // ResolveToPercentages("northwest") returns (15,15)
+            // Selection mapping: x = 180 + round(15/100 * 39) = 180 + round(5.85) = 186
+            //                    y = 180 + round(15/100 * 39) = 180 + round(5.85) = 186
+            int expectedX = 180 + (int)System.Math.Round(15.0 / 100.0 * 39);
+            int expectedY = 180 + (int)System.Math.Round(15.0 / 100.0 * 39);
+
+            Assert.Equal(expectedX, nwSelection.X);
+            Assert.Equal(expectedY, nwSelection.Y);
+
+            // Verify it's NOT at the 2% position (which would be the full-map value)
+            int twoPctX = 180 + (int)System.Math.Round(2.0 / 100.0 * 39);
+            Assert.NotEqual(twoPctX, nwSelection.X);
+        }
+
+        [Fact]
+        public void ResolveWithinSelection_CardinalSemanticsRemainUnchanged()
+        {
+            // Selection-scoped cardinals use ResolveToPercentages() which still has 10/90.
+            // This must NOT change even though full-map cardinals moved to 5/95.
+            var resolver = CreateResolver();
+            var selection = new AISelection(180, 180, 40, 40);
+
+            var northSelection = resolver.ResolveWithinSelection(selection, "north");
+
+            // ResolveToPercentages("north") returns (50, 10)
+            // Selection mapping: x = 180 + round(50/100 * 39) = 180 + 20 = 200
+            //                    y = 180 + round(10/100 * 39) = 180 + round(3.9) = 184
+            int expectedX = 180 + (int)System.Math.Round(50.0 / 100.0 * 39);
+            int expectedY = 180 + (int)System.Math.Round(10.0 / 100.0 * 39);
+
+            Assert.Equal(expectedX, northSelection.X);
+            Assert.Equal(expectedY, northSelection.Y);
+
+            // Verify it's NOT at the 5% position (which would be the full-map value)
+            int fivePctY = 180 + (int)System.Math.Round(5.0 / 100.0 * 39);
+            Assert.NotEqual(fivePctY, northSelection.Y);
+        }
     }
 }

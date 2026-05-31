@@ -59,23 +59,23 @@ namespace TSMapEditor.AI
             var (xPct, yPct) = position.ToLowerInvariant() switch
             {
                 "center" => (50, 50),
-                "north" => (50, 10),
-                "south" => (50, 90),
-                "east" => (90, 50),
-                "west" => (10, 50),
-                "northwest" => (15, 15),
-                "northeast" => (85, 15),
-                "southwest" => (15, 85),
-                "southeast" => (85, 85),
+                "north" => (50, 5),
+                "south" => (50, 95),
+                "east" => (95, 50),
+                "west" => (5, 50),
+                "northwest" => (2, 2),
+                "northeast" => (98, 2),
+                "southwest" => (2, 98),
+                "southeast" => (98, 98),
                 // Aliases
-                "top" => (50, 10),
-                "bottom" => (50, 90),
-                "left" => (10, 50),
-                "right" => (90, 50),
-                "top_left" => (15, 15),
-                "top_right" => (85, 15),
-                "bottom_left" => (15, 85),
-                "bottom_right" => (85, 85),
+                "top" => (50, 5),
+                "bottom" => (50, 95),
+                "left" => (5, 50),
+                "right" => (95, 50),
+                "top_left" => (2, 2),
+                "top_right" => (98, 2),
+                "bottom_left" => (2, 98),
+                "bottom_right" => (98, 98),
                 _ => (50, 50), // Unknown → center
             };
 
@@ -109,8 +109,9 @@ namespace TSMapEditor.AI
 
             // Map percentage to screen-space offset from center
             // 50% → 0 offset, 0% → -radius, 100% → +radius
-            // Use 85% of radius to keep things safely inside the diamond
-            int safeRadius = (int)(radius * 0.85);
+            // Use 95% of radius to keep things safely inside the diamond
+            // (ClampToDiamond provides the final boundary guarantee)
+            int safeRadius = (int)(radius * 0.95);
 
             double screenXOffset = (xPct - 50.0) / 50.0 * safeRadius;
             double screenYOffset = (yPct - 50.0) / 50.0 * safeRadius;

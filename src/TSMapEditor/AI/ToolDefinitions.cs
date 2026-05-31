@@ -201,12 +201,13 @@ namespace TSMapEditor.AI
                         ["properties"] = new Dictionary<string, object>
                         {
                             ["name"] = PropString("建筑INI名称"),
+                            ["position"] = PropEnum("语义位置。优先用于 northwest/northeast/southwest/southeast/north/south/east/west/center 等命名位置；仅当用户给出明确百分比时才用 x_pct/y_pct", PositionEnum),
                             ["x_pct"] = PropInt("X百分比", 0, 100),
                             ["y_pct"] = PropInt("Y百分比", 0, 100),
                             ["owner"] = PropString("所属方(默认Neutral)"),
                             ["coordinate_scope"] = PropCoordinateScope(),
                         },
-                        ["required"] = new[] { "name", "x_pct", "y_pct" }
+                        ["required"] = new[] { "name" }
                     }
                 }
             }, required: new[] { "items" })
@@ -228,12 +229,13 @@ namespace TSMapEditor.AI
                         ["properties"] = new Dictionary<string, object>
                         {
                             ["name"] = PropString("单位INI名称"),
+                            ["position"] = PropEnum("语义位置。优先用于 northwest/northeast/southwest/southeast/north/south/east/west/center 等命名位置；仅当用户给出明确百分比时才用 x_pct/y_pct", PositionEnum),
                             ["x_pct"] = PropInt("X百分比", 0, 100),
                             ["y_pct"] = PropInt("Y百分比", 0, 100),
                             ["owner"] = PropString("所属方(默认Neutral)"),
                             ["coordinate_scope"] = PropCoordinateScope(),
                         },
-                        ["required"] = new[] { "name", "x_pct", "y_pct" }
+                        ["required"] = new[] { "name" }
                     }
                 }
             }, required: new[] { "items" })
@@ -270,12 +272,13 @@ namespace TSMapEditor.AI
                         ["properties"] = new Dictionary<string, object>
                         {
                             ["name"] = PropString("步兵INI名称"),
+                            ["position"] = PropEnum("语义位置。优先用于 northwest/northeast/southwest/southeast/north/south/east/west/center 等命名位置；仅当用户给出明确百分比时才用 x_pct/y_pct", PositionEnum),
                             ["x_pct"] = PropInt("X百分比", 0, 100),
                             ["y_pct"] = PropInt("Y百分比", 0, 100),
                             ["owner"] = PropString("所属方(默认Neutral)"),
                             ["coordinate_scope"] = PropCoordinateScope(),
                         },
-                        ["required"] = new[] { "name", "x_pct", "y_pct" }
+                        ["required"] = new[] { "name" }
                     }
                 }
             }, required: new[] { "items" })

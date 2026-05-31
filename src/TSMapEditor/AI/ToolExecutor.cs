@@ -718,7 +718,8 @@ namespace TSMapEditor.AI
 
         /// <summary>
         /// Batch placement: handles place_buildings, place_units, and place_infantries.
-        /// Accepts {"items": [{name, x_pct, y_pct, owner?}, ...]}
+        /// Accepts {"items": [{name, position?, x_pct?, y_pct?, owner?, coordinate_scope?}, ...]}
+        /// Items can use either semantic position (e.g. "northwest") or explicit x_pct/y_pct.
         /// </summary>
         private string ExecutePlaceBatch(JsonElement args, AIPlaceObjectType objectType)
         {
@@ -730,19 +731,17 @@ namespace TSMapEditor.AI
             var errors = new List<string>();
             var spawnWarnings = new List<string>();
             var spawnZones = GetSpawnExclusionZones();
-            AISelection activeSelection = GetActiveSelection(PositionScope.SelectionWhenActive);
 
             foreach (var item in itemsArray.EnumerateArray())
             {
                 try
                 {
                     string name = item.GetProperty("name").GetString();
-                    int xPct = item.TryGetProperty("x_pct", out var xp) ? ParseJsonInt(xp, 50) : 50;
-                    int yPct = item.TryGetProperty("y_pct", out var yp) ? ParseJsonInt(yp, 50) : 50;
                     string ownerName = item.TryGetProperty("owner", out var ow) ? ow.GetString() ?? "Neutral" : "Neutral";
 
                     var itemScope = ResolveRequestedPositionScope(item, PositionScope.SelectionWhenActive);
-                    var pos = ResolvePercentagePosition(xPct, yPct, itemScope);
+                    AISelection activeSelection = GetActiveSelection(itemScope);
+                    var pos = ResolvePosition(item, itemScope);
 
                     string resolvedName = ResolveObjectININame(name, objectType);
                     if (resolvedName == null)
